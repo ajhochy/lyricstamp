@@ -1,7 +1,8 @@
 import type http from 'node:http';
 import { parseChordPro } from './chordpro.js';
 import { writeAlsFile } from './als-writer.js';
-import type { Song, LyricStamp } from '../../shared/types.js';
+import { packLeadsheetZip } from './zip-packer.js';
+import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
 
 const MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB — generous for future PDF data-URL payloads
 
@@ -191,6 +192,150 @@ async function handlePostExportAls(
   res.end(alsBuffer);
 }
 
+/** Decode a PNG data URL into a Buffer. Returns null if not a valid PNG data URL. */
+function decodePngDataUrl(dataUrl: string): Buffer | null {
+  const PREFIX = 'data:image/png;base64,';
+  if (!dataUrl.startsWith(PREFIX)) return null;
+  const base64 = dataUrl.slice(PREFIX.length);
+  // Validate base64 string is non-empty
+  if (base64.length === 0) return null;
+  return Buffer.from(base64, 'base64');
+}
+
+async function handlePostExportZip(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  let raw: string;
+  try {
+    raw = await readBody(req);
+  } catch {
+    json(res, 400, { error: 'Failed to read request body' });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    json(res, 400, { error: 'Body must be a JSON object' });
+    return;
+  }
+
+  const { song, stamps } = body as Record<string, unknown>;
+
+  if (song === undefined || song === null) {
+    json(res, 400, { error: 'Missing required field: song' });
+    return;
+  }
+
+  if (!Array.isArray(stamps)) {
+    json(res, 400, { error: 'Missing required field: stamps (array)' });
+    return;
+  }
+
+  if (stamps.length > MAX_STAMPS) {
+    json(res, 400, { error: `stamps array exceeds maximum length of ${MAX_STAMPS}` });
+    return;
+  }
+
+  // Validate song shape
+  if (
+    typeof song !== 'object' ||
+    typeof (song as Record<string, unknown>).bpm !== 'number' ||
+    typeof (song as Record<string, unknown>).name !== 'string'
+  ) {
+    json(res, 400, { error: 'Invalid song object: must have name (string) and bpm (number)' });
+    return;
+  }
+
+  const songObj = song as Song;
+
+  // Validate each stamp has required SheetStamp fields
+  for (let i = 0; i < stamps.length; i++) {
+    const stamp = stamps[i] as Record<string, unknown>;
+    if (
+      typeof stamp.id !== 'string' ||
+      typeof stamp.page !== 'number' ||
+      typeof stamp.region !== 'string' ||
+      typeof stamp.imageRef !== 'string' ||
+      typeof stamp.pngDataUrl !== 'string' ||
+      typeof stamp.ts !== 'number'
+    ) {
+      json(res, 400, {
+        error: `stamps[${i}] missing required fields: id (string), page (number), region (string), imageRef (string), pngDataUrl (string), ts (number)`,
+      });
+      return;
+    }
+  }
+
+  const sheetStamps = stamps as SheetStamp[];
+
+  // Dedupe pages by page number — pick the first stamp encountered per page
+  const pageMap = new Map<number, { filename: string; pngBuffer: Buffer }>();
+  for (const stamp of sheetStamps) {
+    if (!pageMap.has(stamp.page)) {
+      const pngBuffer = decodePngDataUrl(stamp.pngDataUrl);
+      if (pngBuffer === null) {
+        json(res, 400, { error: `stamps entry for page ${stamp.page} has invalid pngDataUrl: must be a data:image/png;base64,... URL` });
+        return;
+      }
+      pageMap.set(stamp.page, { filename: `page${stamp.page}.png`, pngBuffer });
+    }
+  }
+  const pages = Array.from(pageMap.values());
+
+  // Build manifest — all stamps in original order, pngDataUrl omitted
+  const manifest = sheetStamps.map((stamp) => ({
+    ts: stamp.ts,
+    page: stamp.page,
+    imageRef: stamp.imageRef,
+    region: stamp.region,
+  }));
+
+  // Build .als clip inputs using [img:imageRef] naming
+  const stampInputs = sheetStamps.map((stamp) => ({
+    ts: stamp.ts,
+    clipName: `[img:${stamp.imageRef}]`,
+  }));
+
+  let stampsAls: Buffer;
+  try {
+    stampsAls = writeAlsFile({
+      bpm: songObj.bpm,
+      trackName: 'Leadsheet +LYRICS',
+      stamps: stampInputs,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    json(res, 400, { error: `Failed to generate Stamps.als: ${message}` });
+    return;
+  }
+
+  let zipBuffer: Buffer;
+  try {
+    zipBuffer = await packLeadsheetZip({ pages, manifest, stampsAls });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    json(res, 500, { error: `Failed to build zip: ${message}` });
+    return;
+  }
+
+  const filename = `${sanitizeFilename(songObj.name)}.zip`;
+
+  res.writeHead(200, {
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename="${filename}"`,
+    'Content-Length': zipBuffer.byteLength,
+  });
+  res.end(zipBuffer);
+}
+
 // ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
@@ -221,6 +366,11 @@ export async function handleRequest(
 
   if (method === 'POST' && path === '/api/export/als') {
     await handlePostExportAls(req, res);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/export/zip') {
+    await handlePostExportZip(req, res);
     return;
   }
 
