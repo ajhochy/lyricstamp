@@ -16,7 +16,6 @@ export type Tweaks = {
   lyricSize: 'balanced' | 'massive';
   logDensity: 'tight' | 'spacious';
   showSectionHeaders: boolean;
-  connectionStatus: 'connected' | 'disconnected';
 };
 
 // ---------------------------------------------------------------------------
@@ -29,7 +28,6 @@ const VALID_THEME = new Set<Tweaks['theme']>(['dark', 'light']);
 const VALID_ACCENT = new Set<Tweaks['accent']>(['teal', 'amber', 'blue', 'violet']);
 const VALID_LYRIC_SIZE = new Set<Tweaks['lyricSize']>(['balanced', 'massive']);
 const VALID_LOG_DENSITY = new Set<Tweaks['logDensity']>(['tight', 'spacious']);
-const VALID_CONNECTION_STATUS = new Set<Tweaks['connectionStatus']>(['connected', 'disconnected']);
 
 function sanitize(stored: Record<string, unknown>, defaults: Tweaks): Tweaks {
   return {
@@ -53,11 +51,6 @@ function sanitize(stored: Record<string, unknown>, defaults: Tweaks): Tweaks {
       typeof stored['showSectionHeaders'] === 'boolean'
         ? stored['showSectionHeaders']
         : defaults.showSectionHeaders,
-    connectionStatus: VALID_CONNECTION_STATUS.has(
-      stored['connectionStatus'] as Tweaks['connectionStatus'],
-    )
-      ? (stored['connectionStatus'] as Tweaks['connectionStatus'])
-      : defaults.connectionStatus,
   };
 }
 

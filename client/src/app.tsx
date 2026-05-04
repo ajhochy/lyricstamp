@@ -1,5 +1,4 @@
 // app.tsx — AbleSet Sync main app component
-// Ported from design/app.jsx. Mocked clock + connection kept intact; real wiring lands in #17–#22.
 import {
   useState,
   useEffect,
@@ -20,6 +19,7 @@ import {
 } from './data';
 import { LyricsView, LeadsheetView, TweaksUI, type StampRow } from './views';
 import { useTweaks, type Tweaks } from './use-tweaks';
+import { useLive } from './use-live';
 
 // ---------------------------------------------------------------------------
 // Tweak defaults — must match Tweaks type from use-tweaks.ts.
@@ -31,7 +31,6 @@ const TWEAK_DEFAULTS: Tweaks = {
   lyricSize: 'balanced',
   logDensity: 'tight',
   showSectionHeaders: true,
-  connectionStatus: 'connected',
 };
 
 // ---------------------------------------------------------------------------
@@ -49,9 +48,16 @@ export function App() {
     `{title: ${SAMPLE_SONG.name}}\n{key: G}\n\n[Verse 1]\n[Verse 1 line 1]\n[Verse 1 line 2]\n…`,
   );
 
-  // Playback — mocked clock; real WebSocket clock lands in #17
-  const [playing, setPlaying] = useState<boolean>(true);
-  const [time, setTime] = useState<number>(72.4);
+  // Playback — driven by WebSocket (#17)
+  const { ts: time, bpm: liveBpm, playing: liveConnectedPlaying, connected } = useLive();
+  // Local play/pause toggle overrides the live state for the hint bar and Space key.
+  // The real play state from Ableton is `liveConnectedPlaying`; the Space key is
+  // a local UI hint (stamping workflow) and does not control Ableton.
+  const [playing, setPlaying] = useState<boolean>(false);
+  // Sync play state from live tick messages
+  useEffect(() => {
+    setPlaying(liveConnectedPlaying);
+  }, [liveConnectedPlaying]);
 
   // Stamps
   const [stamps, setStamps] = useState<InitialStamp[]>(INITIAL_STAMPS);
@@ -73,13 +79,6 @@ export function App() {
   // Leadsheet
   const [pdfPage, setPdfPage] = useState<number>(1);
   const [leadsheetStamps] = useState<InitialLeadsheetStamp[]>(INITIAL_LEADSHEET_STAMPS);
-
-  // ---- Time tick — mocked; replaced by WebSocket in #17 ----
-  useEffect(() => {
-    if (!playing) return;
-    const iv = setInterval(() => setTime((t) => +(t + 0.1).toFixed(2)), 100);
-    return () => clearInterval(iv);
-  }, [playing]);
 
   // ---- Cursor lookup helpers ----
   const lineCount = useMemo(
@@ -248,9 +247,9 @@ export function App() {
 
         <span className="header-divider" />
 
-        <span className={`badge${tweaks.connectionStatus === 'connected' ? ' connected' : ''}`}>
+        <span className={`badge${connected ? ' connected' : ''}`}>
           <span className="pulse" />
-          {tweaks.connectionStatus === 'connected' ? 'Connected' : 'Disconnected'}
+          {connected ? 'Connected' : 'Disconnected'}
         </span>
 
         <span className="header-divider" />
@@ -264,7 +263,7 @@ export function App() {
             <span className="ms">.{fmt(time).split('.')[1]}</span>
           </span>
           <span className="bpm">
-            <span className="val">{SAMPLE_SONG.bpm}</span>
+            <span className="val">{liveBpm}</span>
             <span className="label">BPM</span>
             <span className="dot-sep" />
             <span className="val">{SAMPLE_SONG.key}</span>

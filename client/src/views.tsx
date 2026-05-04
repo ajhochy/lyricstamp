@@ -351,16 +351,5 @@ export const TweaksUI: React.FC<TweaksUIProps> = ({ tweaks, setTweak }) => (
       />
     </TweakSection>
 
-    <TweakSection label="Status">
-      <TweakRadio
-        label="Connection"
-        value={tweaks.connectionStatus}
-        onChange={(v) => setTweak('connectionStatus', v as Tweaks['connectionStatus'])}
-        options={[
-          { label: 'Connected', value: 'connected' },
-          { label: 'Disconnected', value: 'disconnected' },
-        ]}
-      />
-    </TweakSection>
   </TweaksPanel>
 );
