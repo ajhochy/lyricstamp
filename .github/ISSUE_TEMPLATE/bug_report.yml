@@ -1,0 +1,65 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear and concise description of the bug.
+      placeholder: Briefly describe what went wrong.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the behavior.
+      placeholder: |
+        1. Open the app
+        2. Connect to AbleSet
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened?
+    validations:
+      required: true
+
+  - type: input
+    id: macos_version
+    attributes:
+      label: macOS Version
+      placeholder: e.g. macOS 14.5 Sonoma
+    validations:
+      required: true
+
+  - type: input
+    id: ableton_version
+    attributes:
+      label: Ableton Live Version
+      placeholder: e.g. Ableton Live 12.0.5
+    validations:
+      required: true
+
+  - type: input
+    id: node_version
+    attributes:
+      label: Node Version
+      placeholder: e.g. 18.20.2
+    validations:
+      required: true
