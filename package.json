@@ -13,7 +13,9 @@
     "typecheck": "tsc -p client/tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
-    "generate-template": "tsx scripts/generate-template.ts"
+    "generate-template": "tsx scripts/generate-template.ts",
+    "copy:pdf-worker": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs client/public/pdf.worker.min.js",
+    "postinstall": "npm run copy:pdf-worker"
   },
   "dependencies": {
     "@types/archiver": "^7.0.0",
@@ -22,6 +24,7 @@
     "chordsheetjs": "^14.5.1",
     "fast-xml-parser": "^5.7.2",
     "node-osc": "^11.4.0",
+    "pdfjs-dist": "^5.7.284",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "ws": "^8.20.0"

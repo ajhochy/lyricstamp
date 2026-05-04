@@ -1,6 +1,6 @@
 // views.tsx — LyricsView, LeadsheetView, TweaksUI
 // Ported from design/views.jsx. Class names and markup kept identical.
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Icon } from './icons';
 import {
   TweaksPanel,
@@ -10,7 +10,7 @@ import {
   TweakToggle,
 } from './tweaks-panel';
 import { fmt } from './format';
-import { LEADSHEET_PAGES } from './data';
+import { type PdfRenderer } from './use-pdf';
 import { type Tweaks } from './use-tweaks';
 
 export type { Tweaks };
@@ -203,6 +203,9 @@ export interface LeadsheetViewProps {
   setPage: (page: number) => void;
   stamps: LeadsheetStamp[];
   tweaks: Tweaks;
+  pdfFile: File | null;
+  onPdfChange: (file: File) => void;
+  pageRenderer: PdfRenderer;
 }
 
 export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
@@ -212,8 +215,34 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
   setPage,
   stamps,
   tweaks,
+  pdfFile,
+  onPdfChange,
+  pageRenderer,
 }) => {
-  const pageData = LEADSHEET_PAGES[page - 1];
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { pageCount, renderToCanvas } = pageRenderer;
+
+  // Re-render whenever the page or the PDF changes.
+  useEffect(() => {
+    if (!pdfFile || !canvasRef.current) return;
+    let cancelled = false;
+    renderToCanvas(page, canvasRef.current).catch((err) => {
+      if (!cancelled) console.error('[LeadsheetView] render error:', err);
+    });
+    return () => { cancelled = true; };
+  }, [page, pdfFile, renderToCanvas]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = e.target.files?.[0];
+    if (picked) onPdfChange(picked);
+    // Reset input so the same file can be re-selected if needed.
+    e.target.value = '';
+  };
+
+  const totalPages = pageCount > 0 ? pageCount : 1;
+  const displayName = pdfFile ? pdfFile.name : 'untitled-leadsheet.pdf';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -223,8 +252,12 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
           <div className="left">
             <Icon name="file" size={12} />
             <span className="label">PDF</span>
-            <span className="song-name">untitled-leadsheet.pdf</span>
-            <span className="meta">· {LEADSHEET_PAGES.length} pages · loaded</span>
+            <span className="song-name">{displayName}</span>
+            {pdfFile ? (
+              <span className="meta">· {pageCount} pages · loaded</span>
+            ) : (
+              <span className="meta">· no PDF loaded</span>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <input
@@ -233,7 +266,17 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
               onChange={(e) => setSongName(e.target.value)}
               style={{ padding: '5px 9px', fontSize: 12, width: 220 }}
             />
-            <button className="btn">Change PDF</button>
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf"
+              style={{ display: 'none' }}
+              onChange={handleFileChange}
+            />
+            <button className="btn" onClick={() => fileInputRef.current?.click()}>
+              Change PDF
+            </button>
           </div>
         </div>
       </section>
@@ -242,30 +285,53 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
         <div className="viewer">
           <div className="leadsheet-stage">
             <div className="pdf-frame">
-              <div className="pdf-page">
-                <div className="pdf-title">{pageData.title}</div>
-                <div className="pdf-subtitle">{pageData.subtitle}</div>
-                {pageData.sections.map((sec, si) => (
-                  <div key={si}>
-                    <div className="pdf-section-label">{sec.label}</div>
-                    {sec.lines.map((ln, li) => (
-                      <div key={li} className={`pdf-line${ln.current ? ' highlighted' : ''}`}>
-                        <div className="chord">{ln.chords}</div>
-                        {ln.lyric && <div>{ln.lyric}</div>}
-                      </div>
-                    ))}
+              {pdfFile ? (
+                <canvas
+                  ref={canvasRef}
+                  style={{ display: 'block', maxWidth: '100%' }}
+                />
+              ) : (
+                <div
+                  className="pdf-page"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: 320,
+                    gap: 12,
+                    opacity: 0.6,
+                  }}
+                >
+                  <Icon name="file" size={32} />
+                  <div style={{ fontSize: 14, color: 'var(--fg-2)' }}>
+                    Drop or select a PDF to begin
                   </div>
-                ))}
-              </div>
+                  <button
+                    className="btn primary"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Select PDF
+                  </button>
+                </div>
+              )}
               <div className="pdf-page-no">— {page} —</div>
             </div>
 
             <div className="page-controls">
-              <button className="arrow" onClick={() => setPage(Math.max(1, page - 1))}>
+              <button
+                className="arrow"
+                onClick={() => setPage(Math.max(1, page - 1))}
+                disabled={page <= 1}
+              >
                 <Icon name="chevron-left" size={14} />
               </button>
-              <span className="pageno">page {page} / {LEADSHEET_PAGES.length}</span>
-              <button className="arrow" onClick={() => setPage(Math.min(LEADSHEET_PAGES.length, page + 1))}>
+              <span className="pageno">page {page} / {totalPages}</span>
+              <button
+                className="arrow"
+                onClick={() => setPage(Math.min(totalPages, page + 1))}
+                disabled={page >= totalPages}
+              >
                 <Icon name="chevron-right" size={14} />
               </button>
             </div>
@@ -286,13 +352,23 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
                 <span className="ts">{fmt(s.ts)}</span>
                 <span className="idx">p{s.page}</span>
                 <span className="text" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                  [img:page{s.page}.jpg] · {s.region}
+                  [img:page{s.page}.png] · {s.region}
                 </span>
                 <button className="undo" title="Undo stamp">
                   <Icon name="undo" size={11} />
                 </button>
               </div>
             ))}
+            {stamps.length === 0 && (
+              <div className="log-row" style={{ opacity: 0.45 }}>
+                <span className="ts" style={{ color: 'var(--fg-4)' }}>—:——</span>
+                <span className="idx">·</span>
+                <span className="text" style={{ fontStyle: 'italic', color: 'var(--fg-3)' }}>
+                  next: stamp on →
+                </span>
+                <span />
+              </div>
+            )}
           </div>
         </aside>
       </div>

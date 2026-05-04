@@ -12,12 +12,10 @@ import {
   SAMPLE_SONG,
   INITIAL_STAMPS,
   INITIAL_CURSOR,
-  INITIAL_LEADSHEET_STAMPS,
-  LEADSHEET_PAGES,
   type InitialStamp,
-  type InitialLeadsheetStamp,
 } from './data';
-import { LyricsView, LeadsheetView, TweaksUI, type StampRow } from './views';
+import { usePdf } from './use-pdf';
+import { LyricsView, LeadsheetView, TweaksUI, type StampRow, type LeadsheetStamp } from './views';
 import { useTweaks, type Tweaks } from './use-tweaks';
 import { useLive } from './use-live';
 import type { Song } from '../../shared/types';
@@ -80,8 +78,10 @@ export function App() {
   }, []);
 
   // Leadsheet
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const pageRenderer = usePdf(pdfFile);
   const [pdfPage, setPdfPage] = useState<number>(1);
-  const [leadsheetStamps] = useState<InitialLeadsheetStamp[]>(INITIAL_LEADSHEET_STAMPS);
+  const [leadsheetStamps, setLeadsheetStamps] = useState<LeadsheetStamp[]>([]);
 
   // ---- Cursor lookup helpers ----
   const lineCount = useMemo(
@@ -219,14 +219,34 @@ export function App() {
         setTimeout(() => setPressed(null), 160);
       } else if (e.code === 'ArrowRight') {
         e.preventDefault();
-        if (tab === 'lyrics') stamp(1);
-        else setPdfPage((p) => Math.min(LEADSHEET_PAGES.length, p + 1));
+        if (tab === 'lyrics') {
+          stamp(1);
+        } else {
+          setPdfPage((p) => {
+            const next = Math.min(Math.max(pageRenderer.pageCount, 1), p + 1);
+            setLeadsheetStamps((arr) => [
+              ...arr,
+              { page: next, region: '', ts: time },
+            ]);
+            return next;
+          });
+        }
         setPressed('right');
         setTimeout(() => setPressed(null), 160);
       } else if (e.code === 'ArrowLeft') {
         e.preventDefault();
-        if (tab === 'lyrics') stamp(-1);
-        else setPdfPage((p) => Math.max(1, p - 1));
+        if (tab === 'lyrics') {
+          stamp(-1);
+        } else {
+          setPdfPage((p) => {
+            const next = Math.max(1, p - 1);
+            setLeadsheetStamps((arr) => [
+              ...arr,
+              { page: next, region: '', ts: time },
+            ]);
+            return next;
+          });
+        }
         setPressed('left');
         setTimeout(() => setPressed(null), 160);
       } else if (e.key.toLowerCase() === 'e') {
@@ -239,7 +259,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand]);
+  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand, pageRenderer.pageCount]);
 
   // ---- Auto-scroll log to bottom on new stamp ----
   const logScrollRef = useRef<HTMLDivElement>(null);
@@ -373,6 +393,12 @@ export function App() {
             setPage={setPdfPage}
             stamps={leadsheetStamps}
             tweaks={tweaks}
+            pdfFile={pdfFile}
+            onPdfChange={(file) => {
+              setPdfFile(file);
+              setPdfPage(1);
+            }}
+            pageRenderer={pageRenderer}
           />
         )}
       </div>
@@ -405,7 +431,7 @@ export function App() {
           <span>
             {tab === 'lyrics'
               ? `${stamps.length} stamps`
-              : `page ${pdfPage}/${LEADSHEET_PAGES.length}`}
+              : `page ${pdfPage}/${pageRenderer.pageCount > 0 ? pageRenderer.pageCount : 1}`}
           </span>
           <span className="dot-sep" />
           <span>v0.3.1</span>
