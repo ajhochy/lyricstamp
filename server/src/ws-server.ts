@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { URL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { OscClient } from './osc-client.js';
-import type { LiveMsg } from '../../shared/types.js';
+import type { LiveMsg, ClientMsg } from '../../shared/types.js';
 
 const PING_INTERVAL_MS = 30_000;
 
@@ -74,6 +74,30 @@ export function attachWebSocketServer(httpServer: Server, oscClient: OscClient):
 
     ws.on('pong', () => {
       isAlive = true;
+    });
+
+    // Handle inbound client→server commands
+    ws.on('message', (data) => {
+      if (typeof data !== 'string' && !Buffer.isBuffer(data)) return;
+      let msg: unknown;
+      try {
+        msg = JSON.parse(typeof data === 'string' ? data : data.toString('utf8'));
+      } catch {
+        return; // malformed JSON — ignore
+      }
+      if (
+        typeof msg !== 'object' ||
+        msg === null ||
+        (msg as Record<string, unknown>)['type'] !== 'transport'
+      ) {
+        return; // unknown shape — ignore
+      }
+      const clientMsg = msg as ClientMsg;
+      if (clientMsg.action === 'play') {
+        oscClient.startPlaying();
+      } else if (clientMsg.action === 'pause') {
+        oscClient.stopPlaying();
+      }
     });
 
     ws.on('close', () => {

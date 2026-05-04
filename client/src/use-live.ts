@@ -1,15 +1,21 @@
 // use-live.ts — WebSocket hook for live Ableton playback state
 // Connects to ws://<host>/live (Vite proxy → backend :7878).
-// Exposes { ts, bpm, playing, connected } driven by LiveMsg events.
+// Exposes { state, sendCommand } where state is driven by LiveMsg events
+// and sendCommand sends a ClientMsg to the server over the same socket.
 
-import { useState, useEffect, useRef } from 'react';
-import type { LiveMsg } from '../../shared/types';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { LiveMsg, ClientMsg } from '../../shared/types';
 
 export type LiveState = {
   ts: number;
   bpm: number;
   playing: boolean;
   connected: boolean; // true only when WS is alive AND Ableton OSC handshake succeeded
+};
+
+export type UseLiveReturn = {
+  state: LiveState;
+  sendCommand: (msg: ClientMsg) => void;
 };
 
 const INITIAL_STATE: LiveState = {
@@ -22,7 +28,7 @@ const INITIAL_STATE: LiveState = {
 const BACKOFF_START_MS = 500;
 const BACKOFF_CAP_MS = 5000;
 
-export function useLive(): LiveState {
+export function useLive(): UseLiveReturn {
   const [state, setState] = useState<LiveState>(INITIAL_STATE);
 
   // Mutable refs so reconnect closure always has the latest values without
@@ -107,5 +113,16 @@ export function useLive(): LiveState {
     };
   }, []); // runs once on mount; reconnect is handled internally
 
-  return state;
+  // sendCommand: write a ClientMsg to the open WS; no-op if closed/connecting
+  const sendCommand = useCallback(
+    (msg: ClientMsg) => {
+      const ws = wsRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    },
+    [],
+  );
+
+  return { state, sendCommand };
 }

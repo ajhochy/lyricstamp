@@ -48,11 +48,11 @@ export function App() {
     `{title: ${SAMPLE_SONG.name}}\n{key: G}\n\n[Verse 1]\n[Verse 1 line 1]\n[Verse 1 line 2]\n…`,
   );
 
-  // Playback — driven by WebSocket (#17)
-  const { ts: time, bpm: liveBpm, playing: liveConnectedPlaying, connected } = useLive();
-  // Local play/pause toggle overrides the live state for the hint bar and Space key.
-  // The real play state from Ableton is `liveConnectedPlaying`; the Space key is
-  // a local UI hint (stamping workflow) and does not control Ableton.
+  // Playback — driven by WebSocket (#17) and controlled via WebSocket (#18)
+  const { state: liveState, sendCommand } = useLive();
+  const { ts: time, bpm: liveBpm, playing: liveConnectedPlaying, connected } = liveState;
+  // Optimistic local play state for the pill and hint bar.
+  // Flips immediately on Space; the next tick (~100 ms) will confirm or correct.
   const [playing, setPlaying] = useState<boolean>(false);
   // Sync play state from live tick messages
   useEffect(() => {
@@ -167,7 +167,11 @@ export function App() {
 
       if (e.code === 'Space') {
         e.preventDefault();
-        setPlaying((p) => !p);
+        // Optimistically flip the pill; the next OSC tick will confirm (~100 ms).
+        setPlaying((p) => {
+          sendCommand({ type: 'transport', action: p ? 'pause' : 'play' });
+          return !p;
+        });
         setPressed('space');
         setTimeout(() => setPressed(null), 160);
       } else if (e.code === 'ArrowRight') {
@@ -192,7 +196,7 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cursor, time, tab, stamps, stamp, exportFile]);
+  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand]);
 
   // ---- Auto-scroll log to bottom on new stamp ----
   const logScrollRef = useRef<HTMLDivElement>(null);
