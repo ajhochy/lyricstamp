@@ -308,7 +308,7 @@ async function handlePostExportZip(
   try {
     stampsAls = writeAlsFile({
       bpm: songObj.bpm,
-      trackName: 'Leadsheet +LYRICS',
+      trackName: 'Vocals +LYRICS',
       stamps: stampInputs,
     });
   } catch (err) {
