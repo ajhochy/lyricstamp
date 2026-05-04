@@ -16,7 +16,9 @@
     "generate-template": "tsx scripts/generate-template.ts"
   },
   "dependencies": {
+    "@types/archiver": "^7.0.0",
     "@types/node-osc": "^10.0.0",
+    "archiver": "^7.0.1",
     "chordsheetjs": "^14.5.1",
     "fast-xml-parser": "^5.7.2",
     "node-osc": "^11.4.0",
