@@ -30,3 +30,14 @@ yarn-error.log*
 *.swo
 *~
 out/
+
+# Ableton Live project folders (user data — do not commit per AGENTS.md)
+*Project/
+*project/
+
+# Playwright test output
+test-results/
+playwright-report/
+
+# Template backups
+templates/*.bak

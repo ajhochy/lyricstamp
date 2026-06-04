@@ -40,14 +40,13 @@ describe('writeAlsFile', () => {
     it('renames the track EffectiveName in the output', () => {
       const result = writeAlsFile({ bpm: 120, trackName: 'Lead Sheet', stamps: [] });
       const xml = gunzipToString(result);
-      expect(xml).toContain('<EffectiveName Value="Lead Sheet">');
+      expect(xml).toContain('<EffectiveName Value="Lead Sheet" />');
     });
 
     it('template default track name is replaced', () => {
       const result = writeAlsFile({ bpm: 120, trackName: 'My Lyrics', stamps: [] });
       const xml = gunzipToString(result);
-      // Original template name should no longer be the first EffectiveName
-      const firstMatch = xml.match(/<EffectiveName Value="([^"]+)">/)?.[1];
+      const firstMatch = xml.match(/<EffectiveName Value="([^"]+)" \/>/)?.[1];
       expect(firstMatch).toBe('My Lyrics');
     });
 
@@ -66,7 +65,7 @@ describe('writeAlsFile', () => {
     it('Leadsheet +LYRICS track name variant appears correctly', () => {
       const result = writeAlsFile({ bpm: 120, trackName: 'Leadsheet +LYRICS', stamps: [] });
       const xml = gunzipToString(result);
-      expect(xml).toContain('<EffectiveName Value="Leadsheet +LYRICS">');
+      expect(xml).toContain('<EffectiveName Value="Leadsheet +LYRICS" />');
     });
   });
 

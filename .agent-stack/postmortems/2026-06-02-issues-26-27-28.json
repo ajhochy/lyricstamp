@@ -1,0 +1,85 @@
+{
+  "run_id": "2026-06-02-issues-26-27-28",
+  "issues": [26, 27, 28],
+  "date": "2026-06-02",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": false,
+  "criteria_results": [
+    {
+      "criterion_id": "issue-26-c1",
+      "text": ".als opens in Ableton Live 12 without error",
+      "contract_status": "absent",
+      "smoke_status": "pass",
+      "category": "none",
+      "notes": "After 3 iterations: (1) guessed MinorVersion 12.0.12049 rejected, (2) empty Value= attributes rejected, (3) swapped to user's native Live 12 template — success. Intermediate failures were C3 in-process corrections."
+    },
+    {
+      "criterion_id": "issue-27-c1",
+      "text": "ChordPro chords preserved inline in lyric text",
+      "contract_status": "absent",
+      "smoke_status": "pass",
+      "category": "none",
+      "notes": "User confirmed chords appear in preview and stamp clip names."
+    },
+    {
+      "criterion_id": "issue-28-c1",
+      "text": "Stamp preview clearly communicates next-to-stamp line",
+      "contract_status": "absent",
+      "smoke_status": "pass",
+      "category": "none",
+      "notes": "User confirmed label and arrow key navigation working."
+    }
+  ],
+  "process_issues": [
+    {
+      "process_category": "P3",
+      "description": "Scope expanded: added Playwright E2E suite, static file serving, and arrow key navigation beyond original issue scope.",
+      "detected_by": "Git diff shows 12 files changed across .als template, routes.ts static serving, Playwright config + specs, app.tsx arrow keys, hintbar update."
+    }
+  ],
+  "workflow_adherence": {
+    "overall_score": "partial",
+    "expected_chain": ["workflow-orchestrator", "acceptance-contract", "coding-agent", "verification-gate", "project-state-updater", "failure-postmortem"],
+    "observed_chain": ["workflow-orchestrator", "coding-agent", "verification-gate", "smoke-test-writer", "failure-postmortem"],
+    "skipped_skills": ["acceptance-contract", "project-state-updater"],
+    "issues": [
+      {
+        "workflow_category": "W1",
+        "affected_skill": "acceptance-contract",
+        "description": "acceptance-contract was skipped for all three issues — no contract.json generated. Issues had acceptance criteria in body but were dispatched directly to coding-agent.",
+        "detected_by": "Transcript inspection: no Skill invocation for acceptance-contract; no docs/ai/contracts/issue-N.json files created."
+      },
+      {
+        "workflow_category": "W1",
+        "affected_skill": "project-state-updater",
+        "description": "project-state-updater was edited in-process rather than dispatched as a skill. The SKILL.md was not invoked via Skill tool.",
+        "detected_by": "Transcript shows Edit on docs/ai/project-state.md directly, no Skill invocation for project-state-updater."
+      },
+      {
+        "workflow_category": "W6",
+        "affected_skill": "coding-agent",
+        "description": "Coding-agent created branch `fix/als-minorversion-live12` instead of stacking onto `issue-1-electron-wrapper`. Required manual stash+checkout+merge.",
+        "detected_by": "Branch mismatch detected after coding-agent dispatch; git branch showed wrong branch."
+      }
+    ]
+  },
+  "implementation_files": [
+    "server/src/als-writer.ts",
+    "server/src/als-writer.test.ts",
+    "server/src/chordpro.ts",
+    "server/src/chordpro.test.ts",
+    "server/src/routes.ts",
+    "client/src/views.tsx",
+    "client/src/styles.css",
+    "client/src/app.tsx",
+    "playwright.config.ts",
+    "e2e/tests/verification.spec.ts",
+    "templates/blank-stamp-track.als",
+    "package.json",
+    "docs/ai/project-state.md"
+  ],
+  "failure_output": "Issue #26 smoke round 1: 'Unsupported MinorVersion (12.0.12049)' — guessed version format wrong (needed underscore: 12.0_12402). Round 2: 'not well-formed (invalid token) at line 101' — regex \\bValue> matched tag name <Value>. Round 3: 'not well-formed (invalid token) at line 248' — same regex matched <Value> tag name with different indentation. Final fix: swapped to user's native Live 12 .als as template, removed all XML patching.",
+  "overall_category": "none",
+  "suggested_follow_up": "For .als template version compatibility, always source template from user's exact Live version rather than guessing/patching version strings."
+}

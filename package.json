@@ -14,6 +14,7 @@
     "typecheck": "tsc -p client/tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
+    "test:e2e": "npx playwright test --config=playwright.config.ts",
     "generate-template": "tsx scripts/generate-template.ts",
     "copy:pdf-worker": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs client/public/pdf.worker.min.js",
     "postinstall": "npm run copy:pdf-worker",
@@ -24,10 +25,21 @@
   "build": {
     "appId": "com.ableset-lyrics-sync",
     "productName": "AbleSet Sync",
-    "directories": { "output": "dist" },
-    "files": ["out/**/*"],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*"
+    ],
     "mac": {
-      "target": [{ "target": "dmg" }, { "target": "zip" }],
+      "target": [
+        {
+          "target": "dmg"
+        },
+        {
+          "target": "zip"
+        }
+      ],
       "category": "public.app-category.music"
     }
   },
@@ -44,6 +56,7 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

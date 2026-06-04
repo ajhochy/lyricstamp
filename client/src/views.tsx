@@ -130,7 +130,8 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
           {tweaks.showSectionHeaders && currentSection && (
             <div className="section-eyebrow">{currentSection}</div>
           )}
-          <div className="lyric-current entering" key={currentLine}>
+          <div className="stamp-target-label">Next to stamp &rarr;</div>
+          <div className="lyric-current next-up" key={currentLine}>
             {currentLine || '—'}
           </div>
           {nextLine && (

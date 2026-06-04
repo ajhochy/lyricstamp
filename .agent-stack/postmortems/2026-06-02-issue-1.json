@@ -1,0 +1,104 @@
+{
+  "run_id": "2026-06-02-issue-1",
+  "issue": 1,
+  "date": "2026-06-02",
+  "smoke_result": "fail",
+  "verification_claimed": "PASS",
+  "divergence": true,
+  "criteria_results": [
+    {
+      "criterion_id": "issue-1-c1",
+      "text": "Electron window loads without error dialog",
+      "contract_status": "absent",
+      "smoke_status": "pass",
+      "category": "C1",
+      "notes": "App opened and UI rendered successfully after static-serving fix. No error dialog shown."
+    },
+    {
+      "criterion_id": "issue-1-c2",
+      "text": ".als export opens correctly in Ableton Live",
+      "contract_status": "absent",
+      "smoke_status": "fail",
+      "category": "C1",
+      "notes": "Ableton rejected the .als file: 'Unsupported MinorVersion (11.0.11202) (at line 3, column 10)'. Template was generated with Live 11.3; user has Live 12 which expects MinorVersion in '12.0.NNNNN' format."
+    },
+    {
+      "criterion_id": "issue-1-c3",
+      "text": "ChordPro preview renders chords and directives",
+      "contract_status": "absent",
+      "smoke_status": "fail",
+      "category": "C1",
+      "notes": "Preview shows lyric text only. Chords in [brackets] and directives in {braces} are stripped by server-side parseChordPro() which intentionally keeps only item.lyrics from ChordLyricsPair items. No client-side chord rendering exists."
+    },
+    {
+      "criterion_id": "issue-1-c4",
+      "text": "Stamp preview highlights the line that will be timestamped",
+      "contract_status": "absent",
+      "smoke_status": "fail",
+      "category": "C1",
+      "notes": "User reports preview shows one line ahead of what actually gets stamped. The lyric-current div (class 'entering') shows cursor line; lyric-next shows cursor+1. UX is ambiguous — 'entering' suggests what is upcoming, but stamp goes to cursor. User interprets highlighted line as 'next' but it is actually 'current'. Needs UX clarification and possible label fix."
+    }
+  ],
+  "process_issues": [
+    {
+      "process_category": "P3",
+      "description": "The static file serving fix (routes.ts, index.ts, electron/main.ts) was implemented inline without a matching issue or acceptance criteria. The original Issue 1 scope was Electron wrapper; the static serving bug was a runtime defect discovered at smoke, not anticipated in the issue.",
+      "detected_by": "Smoke test revealed a completely untested production code path."
+    }
+  ],
+  "workflow_adherence": {
+    "overall_score": "partial",
+    "expected_chain": [
+      "workflow-orchestrator",
+      "acceptance-contract",
+      "coding-agent",
+      "verification-gate",
+      "project-state-updater",
+      "failure-postmortem"
+    ],
+    "observed_chain": [
+      "workflow-orchestrator",
+      "failure-triage",
+      "verification-gate (checks only, no smoke)",
+      "failure-postmortem"
+    ],
+    "skipped_skills": [
+      "acceptance-contract",
+      "coding-agent (fix was inline)",
+      "project-state-updater"
+    ],
+    "issues": [
+      {
+        "workflow_category": "W1",
+        "affected_skill": "acceptance-contract",
+        "description": "acceptance-contract was never run before the original Issue 1 coding-agent work. No contract file exists at docs/ai/contracts/issue-1.json. All 4 smoke failures are C1 (missing contract) as a direct result.",
+        "detected_by": "cat docs/ai/contracts/issue-1.json returned CONTRACT_ABSENT"
+      },
+      {
+        "workflow_category": "W1",
+        "affected_skill": "project-state-updater",
+        "description": "project-state-updater was not dispatched after the static-serving fix was applied and verified. project-state.md was not updated to reflect the new fix.",
+        "detected_by": "No project-state-updater announce string in transcript after fix was applied."
+      }
+    ]
+  },
+  "implementation_files": [
+    "electron/main.ts",
+    "server/src/index.ts",
+    "server/src/routes.ts",
+    "electron.vite.config.ts",
+    "package.json",
+    "package-lock.json",
+    "scripts/run_ai_workflow.py",
+    "AGENTS.md",
+    "docs/ai/architecture.md",
+    "docs/ai/current-plan.md",
+    "docs/ai/decisions.md",
+    "docs/ai/project-state.md",
+    "docs/ai/repo-map.md",
+    "docs/ai/testing-guide.md"
+  ],
+  "failure_output": "Unsupported MinorVersion (11.0.11202) (at line 3, column 10) — Ableton Live 12 rejected the generated .als file. Template XML: <Ableton MajorVersion=\"5\" MinorVersion=\"11.0.11202\" Creator=\"Ableton Live 11.3\">",
+  "overall_category": "C1",
+  "suggested_follow_up": "Run acceptance-contract before any future coding-agent dispatch; the three smoke failures (MinorVersion, chord display, stamp UX) are all C1 — none had a contract test — meaning acceptance-contract would have caught them before implementation."
+}

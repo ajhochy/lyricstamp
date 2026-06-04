@@ -1,8 +1,24 @@
 import type http from 'node:http';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, extname } from 'node:path';
 import { parseChordPro } from './chordpro.js';
 import { writeAlsFile } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
 import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
+
+const STATIC_DIR = resolve(process.cwd(), 'client/dist');
+
+const MIME: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.mjs':  'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.png':  'image/png',
+  '.svg':  'image/svg+xml',
+  '.json': 'application/json; charset=utf-8',
+  '.woff2':'font/woff2',
+  '.woff': 'font/woff',
+};
 
 const MAX_BODY_BYTES = 50 * 1024 * 1024; // 50 MB — generous for future PDF data-URL payloads
 
@@ -35,6 +51,28 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
     'Content-Length': Buffer.byteLength(payload),
   });
   res.end(payload);
+}
+
+function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const url = req.url ?? '/';
+  const path = url === '/' || url === '/index.html'
+    ? resolve(STATIC_DIR, 'index.html')
+    : resolve(STATIC_DIR, url.split('?')[0].replace(/^\/+/, ''));
+
+  if (!existsSync(path) || !path.startsWith(STATIC_DIR)) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+  const ext = extname(path).toLowerCase();
+  const mime = MIME[ext] ?? 'application/octet-stream';
+  const content = readFileSync(path);
+  res.writeHead(200, {
+    'Content-Type': mime,
+    'Content-Length': content.byteLength,
+    'Cache-Control': 'public, max-age=3600',
+  });
+  res.end(content);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +409,16 @@ export async function handleRequest(
 
   if (method === 'POST' && path === '/api/export/zip') {
     await handlePostExportZip(req, res);
+    return;
+  }
+
+  if (method === 'GET' && path.startsWith('/api/')) {
+    json(res, 404, { error: 'Not found' });
+    return;
+  }
+
+  if (method === 'GET') {
+    serveStatic(req, res);
     return;
   }
 

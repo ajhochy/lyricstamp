@@ -374,11 +374,23 @@ export function App() {
         setTimeout(() => setPressed(null), 160);
       } else if (e.key.toLowerCase() === 't') {
         setTab((x) => (x === 'lyrics' ? 'leadsheet' : 'lyrics'));
+      } else if (e.code === 'ArrowUp' && tab === 'lyrics') {
+        e.preventDefault();
+        const prev = findNextTextLine(cursor, -1);
+        if (prev != null) setCursor(prev);
+        setPressed('up');
+        setTimeout(() => setPressed(null), 160);
+      } else if (e.code === 'ArrowDown' && tab === 'lyrics') {
+        e.preventDefault();
+        const nxt = findNextTextLine(cursor, 1);
+        if (nxt != null) setCursor(nxt);
+        setPressed('down');
+        setTimeout(() => setPressed(null), 160);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand, pageRenderer.pageCount]);
+  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand, pageRenderer.pageCount, findNextTextLine]);
 
   // ---- Auto-scroll log to bottom on new stamp ----
   const logScrollRef = useRef<HTMLDivElement>(null);
@@ -542,6 +554,11 @@ export function App() {
           <span className="hint">
             <span className={`kbd${pressed === 'left' ? ' pressed' : ''}`}>←</span>
             {tab === 'lyrics' ? 'Stamp & back' : 'Prev page'}
+          </span>
+          <span className="hint">
+            <span className={`kbd${pressed === 'up' ? ' pressed' : ''}`}>↑</span>
+            <span className={`kbd${pressed === 'down' ? ' pressed' : ''}`} style={{ marginLeft: 2 }}>↓</span>
+            Navigate
           </span>
           <span className="hint">
             <span className={`kbd${pressed === 'e' ? ' pressed' : ''}`}>E</span>

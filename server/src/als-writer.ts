@@ -1,10 +1,10 @@
 /**
  * als-writer.ts
  *
- * Builds a gzipped Ableton Live 11 .als file by injecting MidiClip elements
+ * Builds a gzipped Ableton Live 12 .als file by injecting MidiClip elements
  * into the blank-stamp-track.als template.
  *
- * Reference MidiClip XML structure (Ableton Live 11 / SchemaVersion 3):
+ * Reference MidiClip XML structure (Ableton Live 12 / SchemaVersion 3):
  * -----------------------------------------------------------------------
  * <MidiClip Id="0" Time="{beats}">
  *   <LomId Value="0" />
@@ -105,13 +105,9 @@
 
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
-const TEMPLATE_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../templates/blank-stamp-track.als',
-);
+const TEMPLATE_PATH = resolve(process.cwd(), 'templates/blank-stamp-track.als');
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -141,25 +137,34 @@ export function writeAlsFile(opts: {
   const templateBytes = readFileSync(TEMPLATE_PATH);
   let xml = gunzipSync(templateBytes).toString('utf-8');
 
-  // 2. Rename the MIDI track's EffectiveName.
-  //    The template has exactly one EffectiveName for the MIDI track.
-  //    We replace the first occurrence (track name) leaving the others.
+  // 2. Rename the first MIDI track's EffectiveName.
+  //    The Live 12 template has "Chart +LYRICS [-2n]" and "leadsheet +LYRICS [-2n]".
+  //    We replace the first occurrence with the caller-chosen track name.
   xml = xml.replace(
-    /<EffectiveName Value="Vocals \+LYRICS">/,
-    `<EffectiveName Value="${escapeXml(trackName)}">`,
+    /<EffectiveName Value="Chart \+LYRICS \[-2n\]" \/>/,
+    `<EffectiveName Value="${escapeXml(trackName)}" />`,
   );
 
   // 3. Build MidiClip XML for each stamp and inject into ArrangerAutomation > Events.
   if (stamps.length > 0) {
+    // Compute beat positions and clip durations: each clip extends to the
+    // start of the next clip (or DEFAULT_CLIP_LENGTH after the last one).
+    const beatPositions = stamps.map((s) => s.ts * (bpm / 60));
     const clipXml = stamps
-      .map((stamp, idx) => buildMidiClipXml(idx, stamp.ts, bpm, stamp.clipName))
+      .map((stamp, idx) => {
+        const start = beatPositions[idx];
+        const end = idx < stamps.length - 1
+          ? beatPositions[idx + 1]
+          : start + DEFAULT_CLIP_LENGTH;
+        return buildMidiClipXml(idx, start, end, stamp.clipName);
+      })
       .join('\n\t\t\t\t\t');
 
-    // The template has: <ArrangerAutomation>\n\t\t\t\t\t<Events></Events>
-    // Replace the empty Events element with one containing the clips.
+    // The template has: <ArrangerAutomation>\n\t\t\t\t\t<Events />
+    // Replace the self-closing Events element with one containing the clips.
     xml = xml.replace(
-      /(<ArrangerAutomation>[\s\S]*?<Events>)<\/Events>/,
-      `$1\n\t\t\t\t\t\t${clipXml}\n\t\t\t\t\t\t</Events>`,
+      /(<ArrangerAutomation>[\s\S]*?<Events) \/>/,
+      `$1>\n\t\t\t\t\t\t${clipXml}\n\t\t\t\t\t\t</Events>`,
     );
   }
 
@@ -188,21 +193,21 @@ function beatStr(beats: number): string {
   return parseFloat(beats.toFixed(6)).toString();
 }
 
-const CLIP_LENGTH = 0.25; // sixteenth-note duration (beats)
+const DEFAULT_CLIP_LENGTH = 4; // beats — fallback for the last clip when no next stamp
 
 /**
  * Build a single MidiClip XML snippet for insertion into ArrangerAutomation > Events.
- * The clip is a 0.25-beat marker with one C3 (pitch 60) note, velocity 100.
+ * The clip extends from `startBeats` to `endBeats` with one C3 (pitch 60) MIDI note.
  */
 function buildMidiClipXml(
   id: number,
-  ts: number,
-  bpm: number,
+  startBeats: number,
+  endBeats: number,
   clipName: string,
 ): string {
-  const beats = ts * (bpm / 60);
-  const start = beatStr(beats);
-  const end = beatStr(beats + CLIP_LENGTH);
+  const start = beatStr(startBeats);
+  const end = beatStr(endBeats);
+  const length = endBeats - startBeats;
   const name = escapeXml(clipName);
 
   return [
@@ -213,15 +218,15 @@ function buildMidiClipXml(
     `\t<CurrentEnd Value="${end}" />`,
     `\t<Loop>`,
     `\t\t<LoopStart Value="0" />`,
-    `\t\t<LoopEnd Value="${CLIP_LENGTH}" />`,
+    `\t\t<LoopEnd Value="${length}" />`,
     `\t\t<StartRelative Value="0" />`,
     `\t\t<LoopOn Value="false" />`,
-    `\t\t<OutMarker Value="${CLIP_LENGTH}" />`,
+    `\t\t<OutMarker Value="${length}" />`,
     `\t\t<HiddenLoopStart Value="0" />`,
-    `\t\t<HiddenLoopEnd Value="${CLIP_LENGTH}" />`,
+    `\t\t<HiddenLoopEnd Value="${length}" />`,
     `\t</Loop>`,
     `\t<Name Value="${name}" />`,
-    `\t<Annotation Value="" />`,
+    `\t<Annotation Value="0" />`,
     `\t<Color Value="4" />`,
     `\t<LaunchMode Value="0" />`,
     `\t<LaunchQuantisation Value="0" />`,
@@ -239,7 +244,7 @@ function buildMidiClipXml(
     `\t</Envelopes>`,
     `\t<ScrollerTimePreserver>`,
     `\t\t<LeftTime Value="0" />`,
-    `\t\t<RightTime Value="${CLIP_LENGTH}" />`,
+    `\t\t<RightTime Value="${length}" />`,
     `\t</ScrollerTimePreserver>`,
     `\t<TimeSelection>`,
     `\t\t<AnchorTime Value="0" />`,
@@ -280,7 +285,7 @@ function buildMidiClipXml(
     `\t\t<KeyTracks>`,
     `\t\t\t<KeyTrack Id="0">`,
     `\t\t\t\t<Notes>`,
-    `\t\t\t\t\t<MidiNoteEvent Time="0" Duration="${CLIP_LENGTH}" Velocity="100" OffVelocity="64" IsEnabled="true" />`,
+    `\t\t\t\t\t<MidiNoteEvent Time="0" Duration="${length}" Velocity="100" OffVelocity="64" IsEnabled="true" />`,
     `\t\t\t\t</Notes>`,
     `\t\t\t\t<MidiKey Value="60" />`,
     `\t\t\t</KeyTrack>`,
