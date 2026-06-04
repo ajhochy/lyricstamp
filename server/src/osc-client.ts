@@ -25,6 +25,8 @@ const ADDR_IS_PLAYING = '/live/song/get/is_playing';
 const ADDR_TEST = '/live/test';
 const ADDR_START_PLAYING = '/live/song/start_playing';
 const ADDR_STOP_PLAYING = '/live/song/stop_playing';
+const ADDR_CONTINUE_PLAYING = '/live/song/continue_playing';
+const ADDR_SET_SONG_TIME = '/live/song/set/current_song_time';
 
 type OscClientEvents = {
   tick: [TickPayload];
@@ -121,11 +123,43 @@ export class OscClient extends EventEmitter<OscClientEvents> {
     this._send(ADDR_STOP_PLAYING);
   }
 
+  /**
+   * Pause in place: stop playback and immediately restore the playhead to the
+   * last-known position so the timeline does not jump to beat 1.
+   *
+   * AbletonOSC's stop_playing can reset the playhead. Sending
+   * set/current_song_time right after locks it back where it was.
+   */
+  pausePlaying(): void {
+    const savedTs = this._lastTs ?? 0;
+    this._send(ADDR_STOP_PLAYING);
+    this._sendWithValue(ADDR_SET_SONG_TIME, savedTs);
+  }
+
+  /**
+   * Resume playback from the current playhead position using continue_playing,
+   * which does not reset the timeline to beat 1 the way start_playing does.
+   */
+  continuePlaying(): void {
+    this._send(ADDR_CONTINUE_PLAYING);
+  }
+
   private _send(address: string): void {
     if (this._oscClient === null) {
       return;
     }
     this._oscClient.send(address, (err?: Error) => {
+      if (err) {
+        console.error(`[OSC] Send error for ${address}:`, err.message);
+      }
+    });
+  }
+
+  private _sendWithValue(address: string, value: number): void {
+    if (this._oscClient === null) {
+      return;
+    }
+    this._oscClient.send(address, value, (err?: Error) => {
       if (err) {
         console.error(`[OSC] Send error for ${address}:`, err.message);
       }
