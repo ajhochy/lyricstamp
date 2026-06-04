@@ -85,22 +85,24 @@ describe('writeAlsFile', () => {
   });
 
   describe('beat math', () => {
-    it('bpm=120, ts=1.5 → clip at beat 3', () => {
-      // beats = 1.5 * (120 / 60) = 1.5 * 2 = 3.0
+    // ts values are in BEATS — AbletonOSC /live/song/get/current_song_time returns beats.
+    // No seconds→beats conversion: ts is used directly as the clip position in beats.
+
+    it('ts=1.5 (beats) → clip at beat 1.5 (no bpm conversion applied)', () => {
+      // Previously this test assumed ts=1.5 was seconds and expected 1.5*(120/60)=3.
+      // Correct: ts is already in beats, clip lands at beat 1.5.
       const stamps: AlsStampInput[] = [{ ts: 1.5, clipName: 'Verse 1' }];
       const result = writeAlsFile({ bpm: 120, trackName: 'Test', stamps });
       const xml = gunzipToString(result);
-      expect(xml).toContain('Time="3"');
+      expect(xml).toContain('Time="1.5"');
     });
 
-    it('bpm=76, ts=10.0 → clip at beat ~12.6667', () => {
-      // beats = 10.0 * (76 / 60) = 12.666...
-      const beats = 10.0 * (76 / 60);
-      const expectedBeatStr = parseFloat(beats.toFixed(6)).toString();
+    it('ts=10.0 (beats) → clip at beat 10.0 regardless of bpm', () => {
+      // Previously assumed seconds and expected 10*(76/60)≈12.667. Correct: beat 10.
       const stamps: AlsStampInput[] = [{ ts: 10.0, clipName: 'Chorus 1' }];
       const result = writeAlsFile({ bpm: 76, trackName: 'Test', stamps });
       const xml = gunzipToString(result);
-      expect(xml).toContain(`Time="${expectedBeatStr}"`);
+      expect(xml).toContain('Time="10"');
     });
 
     it('ts=0.0 → clip at beat 0', () => {
@@ -110,7 +112,8 @@ describe('writeAlsFile', () => {
       expect(xml).toContain('Time="0"');
     });
 
-    it('multiple stamps produce multiple MidiClip elements', () => {
+    it('multiple stamps produce multiple MidiClip elements at correct beat positions', () => {
+      // ts values are musical beat positions: 0, 4, 8 = bar 1, bar 2, bar 3 in 4/4
       const stamps: AlsStampInput[] = [
         { ts: 0.0, clipName: 'Verse 1' },
         { ts: 4.0, clipName: 'Chorus 1' },
@@ -120,6 +123,9 @@ describe('writeAlsFile', () => {
       const xml = gunzipToString(result);
       const clipMatches = xml.match(/<MidiClip /g);
       expect(clipMatches).toHaveLength(3);
+      expect(xml).toContain('Time="0"');
+      expect(xml).toContain('Time="4"');
+      expect(xml).toContain('Time="8"');
     });
   });
 

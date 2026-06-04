@@ -124,14 +124,15 @@ function getTemplatePath(): string {
 // ---------------------------------------------------------------------------
 
 export type AlsStampInput = {
-  ts: number; // seconds
+  ts: number; // beats — AbletonOSC /live/song/get/current_song_time returns beats, not seconds
   clipName: string; // already-formatted name
 };
 
 /**
  * Build a gzipped .als Buffer from the blank-stamp-track template.
  *
- * @param opts.bpm - Song tempo in beats per minute (used to convert ts → beats).
+ * @param opts.bpm - Song tempo in BPM. Kept in the API for future use (e.g. writing
+ *   a tempo track); no longer used for clip position since ts is already in beats.
  * @param opts.trackName - The EffectiveName for the MIDI track.
  * @param opts.stamps - List of stamps to insert as MidiClip elements.
  * @returns A Buffer containing the gzipped .als file contents.
@@ -141,7 +142,7 @@ export function writeAlsFile(opts: {
   trackName: string;
   stamps: AlsStampInput[];
 }): Buffer {
-  const { bpm, trackName, stamps } = opts;
+  const { trackName, stamps } = opts;
 
   // 1. Read and decompress template
   const templateBytes = readFileSync(getTemplatePath());
@@ -157,9 +158,9 @@ export function writeAlsFile(opts: {
 
   // 3. Build MidiClip XML for each stamp and inject into ArrangerAutomation > Events.
   if (stamps.length > 0) {
-    // Compute beat positions and clip durations: each clip extends to the
-    // start of the next clip (or DEFAULT_CLIP_LENGTH after the last one).
-    const beatPositions = stamps.map((s) => s.ts * (bpm / 60));
+    // ts is already in beats (AbletonOSC current_song_time unit = beats).
+    // No seconds→beats conversion needed.
+    const beatPositions = stamps.map((s) => s.ts);
     const clipXml = stamps
       .map((stamp, idx) => {
         const start = beatPositions[idx];
