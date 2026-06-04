@@ -12,6 +12,8 @@ app.whenReady().then(async () => {
   // In dev mode the Vite dev server handles the renderer; no static dir needed.
   if (!isDev) {
     process.env.ELECTRON_STATIC_DIR = path.join(app.getAppPath(), 'out', 'renderer');
+    // app.getAppPath() is the .asar root; server code reads templates from here.
+    process.env.ELECTRON_APP_ROOT = app.getAppPath();
   }
 
   try {

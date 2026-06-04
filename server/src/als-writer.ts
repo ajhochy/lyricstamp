@@ -107,7 +107,12 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const TEMPLATE_PATH = resolve(process.cwd(), 'templates/blank-stamp-track.als');
+// In the packaged Electron app process.cwd() is '/' — use ELECTRON_APP_ROOT
+// (set by electron/main.ts before the server starts) as the fallback root.
+const TEMPLATE_PATH = resolve(
+  process.env.ELECTRON_APP_ROOT ?? process.cwd(),
+  'templates/blank-stamp-track.als',
+);
 
 // ---------------------------------------------------------------------------
 // Public API
