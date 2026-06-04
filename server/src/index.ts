@@ -1,4 +1,6 @@
 import http from 'node:http';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { OscClient } from './osc-client.js';
 import { attachWebSocketServer } from './ws-server.js';
 import { handleRequest } from './routes.js';
@@ -27,8 +29,13 @@ export async function start(): Promise<void> {
   // Attach the WebSocket broadcast server on the same HTTP server at path /live.
   attachWebSocketServer(server, oscClient);
 
-  await new Promise<void>((resolve) => {
+  // Wire up the reject handler BEFORE calling listen so that EADDRINUSE and
+  // other bind errors are caught by the surrounding try-catch in callers
+  // (e.g. electron/main.ts) rather than surfacing as uncaught exceptions.
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
     server.listen(PORT, HOST, () => {
+      server.off('error', reject);
       console.log(`AbleSet Sync server listening on :${PORT}`);
       console.log(`WebSocket endpoint: ws://${HOST}:${PORT}/live`);
       resolve();
@@ -36,8 +43,21 @@ export async function start(): Promise<void> {
   });
 }
 
-// Auto-start when run directly via tsx (non-Electron usage).
-start().catch((err: unknown) => {
-  console.error('[server] Failed to start:', err);
-  process.exit(1);
-});
+// Auto-start only when this file is the direct entry point (tsx / node).
+// When imported by electron/main.ts the caller manages startup explicitly.
+function isDirectRun(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === pathToFileURL(path.resolve(entry)).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectRun()) {
+  start().catch((err: unknown) => {
+    console.error('[server] Failed to start:', err);
+    process.exit(1);
+  });
+}
