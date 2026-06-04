@@ -94,9 +94,9 @@ export function attachWebSocketServer(httpServer: Server, oscClient: OscClient):
       }
       const clientMsg = msg as ClientMsg;
       if (clientMsg.action === 'play') {
-        oscClient.startPlaying();
+        oscClient.continuePlaying();
       } else if (clientMsg.action === 'pause') {
-        oscClient.stopPlaying();
+        oscClient.pausePlaying();
       }
     });
 
