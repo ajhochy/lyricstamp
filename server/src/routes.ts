@@ -6,7 +6,11 @@ import { writeAlsFile } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
 import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
 
-const STATIC_DIR = resolve(process.cwd(), 'client/dist');
+// electron-builder packages out/**/* — in the packaged app the renderer lives
+// at out/renderer/ relative to app.getAppPath() (set as cwd by electron/main.ts).
+// In standalone dev (tsx server/src/index.ts), out/renderer/ exists if you've
+// run `npm run electron:build` first; otherwise the server only serves the API.
+const STATIC_DIR = resolve(process.cwd(), 'out/renderer');
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
