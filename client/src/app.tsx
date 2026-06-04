@@ -8,15 +8,11 @@ import {
 } from 'react';
 import { Icon } from './icons';
 import { fmt } from './format';
-import {
-  SAMPLE_SONG,
-  INITIAL_STAMPS,
-  INITIAL_CURSOR,
-  type InitialStamp,
-} from './data';
+import { EMPTY_SONG, type InitialStamp } from './data';
 import { usePdf } from './use-pdf';
 import { LyricsView, LeadsheetView, TweaksUI, type StampRow, type LeadsheetStamp } from './views';
 import { useTweaks, type Tweaks } from './use-tweaks';
+import { usePersistentState } from './use-persistent-state';
 import { useLive } from './use-live';
 import type { Song } from '../../shared/types';
 
@@ -40,13 +36,14 @@ export function App() {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
   // ---- App state ----
-  const [tab, setTab] = useState<'lyrics' | 'leadsheet'>('lyrics');
+  // Session state (song, lyrics paste, stamps, cursor, active tab) persists to
+  // localStorage so work survives app restarts. The app starts empty — paste
+  // ChordPro and click "Reload song" to load a song.
+  const [tab, setTab] = usePersistentState<'lyrics' | 'leadsheet'>('tab', 'lyrics');
   const [setupOpen, setSetupOpen] = useState<boolean>(false);
-  const [song, setSong] = useState<Song>(SAMPLE_SONG);
-  const [songName, setSongName] = useState<string>(SAMPLE_SONG.name);
-  const [pasteText, setPasteText] = useState<string>(
-    `{title: ${SAMPLE_SONG.name}}\n{key: G}\n\n[Verse 1]\n[Verse 1 line 1]\n[Verse 1 line 2]\n…`,
-  );
+  const [song, setSong] = usePersistentState<Song>('song', EMPTY_SONG);
+  const [songName, setSongName] = usePersistentState<string>('songName', '');
+  const [pasteText, setPasteText] = usePersistentState<string>('pasteText', '');
   const [reloading, setReloading] = useState<boolean>(false);
 
   // Playback — driven by WebSocket (#17) and controlled via WebSocket (#18)
@@ -61,8 +58,8 @@ export function App() {
   }, [liveConnectedPlaying]);
 
   // Stamps
-  const [stamps, setStamps] = useState<InitialStamp[]>(INITIAL_STAMPS);
-  const [cursor, setCursor] = useState<number>(INITIAL_CURSOR);
+  const [stamps, setStamps] = usePersistentState<InitialStamp[]>('stamps', []);
+  const [cursor, setCursor] = usePersistentState<number>('cursor', 0);
   const [flashIdx, setFlashIdx] = useState<number | null>(null);
 
   // Keyboard pressed visual indicator
@@ -117,8 +114,11 @@ export function App() {
 
   // Section header (preceding) for current line
   const currentSectionLabel = useMemo(() => {
-    for (let i = cursor; i >= 0; i--) {
-      if (song.lines[i].section) return song.lines[i].section ?? null;
+    // Guard against an empty song (lines: []) or a cursor that points past the
+    // end of the current song — song.lines[i] can be undefined in both cases.
+    for (let i = Math.min(cursor, song.lines.length - 1); i >= 0; i--) {
+      const section = song.lines[i]?.section;
+      if (section) return section;
     }
     return null;
   }, [cursor, song]);
@@ -147,12 +147,13 @@ export function App() {
       const target = findNextTextLine(cursor, advance >= 0 ? 1 : -1);
       if (target != null) setCursor(target);
     },
-    [cursor, time, currentLineObj.text, currentSectionLabel, findNextTextLine],
+    // setCursor / setStamps are stable useState setters (via usePersistentState).
+    [cursor, time, currentLineObj.text, currentSectionLabel, findNextTextLine, setCursor, setStamps],
   );
 
   const undoStamp = useCallback((i: number) => {
     setStamps((arr) => arr.filter((_, j) => j !== i));
-  }, []);
+  }, [setStamps]);
 
   // onReload — POST /api/song with current songName + pasteText, replace song state.
   const onReload = useCallback(async () => {
@@ -184,7 +185,11 @@ export function App() {
       }
       setSong(parsed);
       setSongName(parsed.name);
-      setCursor(0);
+      // Land the cursor on the first line that has lyric text, skipping any
+      // leading section header — otherwise the preview shows "—" until the
+      // user advances past the header.
+      const firstTextIdx = parsed.lines.findIndex((l) => l.text);
+      setCursor(firstTextIdx >= 0 ? firstTextIdx : 0);
       setStamps([]);
       const textLines = parsed.lines.filter((l) => l.text).length;
       pushToast(`Loaded ${parsed.name}`, `${textLines} lines`);
@@ -193,7 +198,8 @@ export function App() {
     } finally {
       setReloading(false);
     }
-  }, [songName, pasteText, pushToast]);
+    // setSong / setSongName / setCursor / setStamps are stable useState setters.
+  }, [songName, pasteText, pushToast, setSong, setSongName, setCursor, setStamps]);
 
   // exportLyrics — POST /api/export/als and trigger browser download.
   const exportLyrics = useCallback(async () => {
@@ -390,7 +396,8 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand, pageRenderer.pageCount, findNextTextLine]);
+    // setCursor / setTab are stable useState setters (via usePersistentState).
+  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand, pageRenderer.pageCount, findNextTextLine, setCursor, setTab]);
 
   // ---- Auto-scroll log to bottom on new stamp ----
   const logScrollRef = useRef<HTMLDivElement>(null);

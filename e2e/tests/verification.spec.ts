@@ -17,6 +17,19 @@ const CHORD_PRO_SONG = `
 {end_of_chorus}
 `.trim();
 
+// The app now starts with no song loaded (empty state). Tests that need a
+// populated lyric preview must load a song through the UI first.
+async function loadSong(page: import('@playwright/test').Page): Promise<void> {
+  await page.goto('/');
+  await page.waitForSelector('.workspace', { timeout: 10000 });
+  // The ChordPro setup panel is collapsed by default — expand it.
+  await page.locator('.setup-header').click();
+  await page.locator('.textarea').fill(CHORD_PRO_SONG);
+  await page.getByRole('button', { name: /Reload song/i }).click();
+  // Wait until the preview shows a real lyric line (not the empty-state dash).
+  await expect(page.locator('.lyric-current')).not.toHaveText('—', { timeout: 10000 });
+}
+
 // --- #26: Live 12 compatibility ---
 
 test.describe('#26 — .als export Live 12 compatibility', () => {
@@ -137,8 +150,8 @@ test.describe('#28 — Stamp preview UX labelling', () => {
   });
 
   test('lyric preview displays text content', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('.lyric-current', { timeout: 10000 });
+    // App starts empty; load a song through the UI before asserting on content.
+    await loadSong(page);
 
     const current = page.locator('.lyric-current');
     const text = await current.textContent();
