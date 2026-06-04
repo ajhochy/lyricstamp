@@ -210,7 +210,7 @@ async function handlePostExportAls(
 
   const stampInputs = (stamps as LyricStamp[]).map((stamp) => ({
     ts: stamp.ts,
-    clipName: `${stamp.lineIdx + 1}: ${stamp.lineText.slice(0, 24)}`,
+    clipName: stamp.lineText,
   }));
 
   let alsBuffer: Buffer;
