@@ -6,11 +6,12 @@ import { writeAlsFile } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
 import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
 
-// electron-builder packages out/**/* — in the packaged app the renderer lives
-// at out/renderer/ relative to app.getAppPath() (set as cwd by electron/main.ts).
-// In standalone dev (tsx server/src/index.ts), out/renderer/ exists if you've
-// run `npm run electron:build` first; otherwise the server only serves the API.
-const STATIC_DIR = resolve(process.cwd(), 'out/renderer');
+// Resolved lazily at request time so that ELECTRON_STATIC_DIR set by
+// electron/main.ts (after app is ready) is visible. Fallback to out/renderer
+// relative to cwd for standalone tsx usage.
+function getStaticDir(): string {
+  return process.env.ELECTRON_STATIC_DIR ?? resolve(process.cwd(), 'out/renderer');
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -58,12 +59,13 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
 }
 
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const staticDir = getStaticDir();
   const url = req.url ?? '/';
   const path = url === '/' || url === '/index.html'
-    ? resolve(STATIC_DIR, 'index.html')
-    : resolve(STATIC_DIR, url.split('?')[0].replace(/^\/+/, ''));
+    ? resolve(staticDir, 'index.html')
+    : resolve(staticDir, url.split('?')[0].replace(/^\/+/, ''));
 
-  if (!existsSync(path) || !path.startsWith(STATIC_DIR)) {
+  if (!existsSync(path) || !path.startsWith(staticDir)) {
     res.writeHead(404);
     res.end('Not found');
     return;

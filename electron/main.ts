@@ -1,14 +1,19 @@
+import path from 'node:path';
 import { app, BrowserWindow, dialog } from 'electron';
 import { start } from '../server/src/index.js';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const BACKEND_URL = 'http://127.0.0.1:7878';
 
-// Ensure server's process.cwd() resolves paths relative to the app package
-// root — in production this is Resources/app/ (where out/renderer lives).
-process.chdir(app.getAppPath());
-
 app.whenReady().then(async () => {
+  // Tell the server where the built renderer lives.
+  // In the packaged app, app.getAppPath() returns the .asar path — Electron's
+  // patched fs can read inside it, so this resolves correctly at request time.
+  // In dev mode the Vite dev server handles the renderer; no static dir needed.
+  if (!isDev) {
+    process.env.ELECTRON_STATIC_DIR = path.join(app.getAppPath(), 'out', 'renderer');
+  }
+
   try {
     await start();
   } catch (err: unknown) {
