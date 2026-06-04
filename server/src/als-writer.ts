@@ -107,12 +107,17 @@ import { gunzipSync, gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// In the packaged Electron app process.cwd() is '/' — use ELECTRON_APP_ROOT
-// (set by electron/main.ts before the server starts) as the fallback root.
-const TEMPLATE_PATH = resolve(
-  process.env.ELECTRON_APP_ROOT ?? process.cwd(),
-  'templates/blank-stamp-track.als',
-);
+// Resolve the template path lazily at call time, not at module-init time.
+// In the packaged Electron app, process.cwd() is '/' and ELECTRON_APP_ROOT
+// is set by electron/main.ts inside app.whenReady() — which fires AFTER the
+// module graph is imported. A module-level constant would always see the
+// unset value. Calling this function at export-time gets the correct value.
+function getTemplatePath(): string {
+  return resolve(
+    process.env.ELECTRON_APP_ROOT ?? process.cwd(),
+    'templates/blank-stamp-track.als',
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -139,7 +144,7 @@ export function writeAlsFile(opts: {
   const { bpm, trackName, stamps } = opts;
 
   // 1. Read and decompress template
-  const templateBytes = readFileSync(TEMPLATE_PATH);
+  const templateBytes = readFileSync(getTemplatePath());
   let xml = gunzipSync(templateBytes).toString('utf-8');
 
   // 2. Rename the first MIDI track's EffectiveName.
