@@ -32,6 +32,12 @@
       "out/**/*"
     ],
     "mac": {
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.mac.plist",
+      "entitlementsInherit": "assets/entitlements.mac.plist",
+      "identity": "CF6C1EF1525E70E6E3324388A322938977779DB7",
+      "sign": "scripts/sign.cjs",
       "target": [
         {
           "target": "dmg"
