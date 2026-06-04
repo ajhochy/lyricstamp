@@ -32,11 +32,11 @@
       "out/**/*"
     ],
     "mac": {
+      "icon": "assets/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "entitlements": "assets/entitlements.mac.plist",
-      "entitlementsInherit": "assets/entitlements.mac.plist",
-      "identity": "CF6C1EF1525E70E6E3324388A322938977779DB7",
+      "entitlements": "entitlements.plist",
+      "entitlementsInherit": "entitlements.plist",
       "sign": "scripts/sign.cjs",
       "target": [
         {
@@ -47,6 +47,9 @@
         }
       ],
       "category": "public.app-category.music"
+    },
+    "dmg": {
+      "sign": false
     }
   },
   "dependencies": {
