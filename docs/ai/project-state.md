@@ -116,3 +116,28 @@ Server-side session storage implemented, verified (verification-gate PASS 2026-0
 - Concerns:
   - `applyToAbleton` in `app.tsx` sends `stamps` (the `InitialStamp[]`) directly in the fetch body. The server validates `{idx, ts}` fields — this is structurally correct but the server does not know about `sectionStart`. That field is ignored (not needed for clip names or beat positions). Low risk.
   - `stamp()` behavior unchanged confirmed by tests — pressing ArrowRight does NOT call `/api/live/apply`. Apply is purely the button action.
+
+### 2026-06-05 — issues-A-H-vendor-fork-docs
+- Files modified:
+  - `vendor/AbletonOSC/` (NEW — vendored tree, ~20 files) — full fork of ideoforms/AbletonOSC + local patch, copied from user's live install; excludes `*.bak-*`, `__pycache__`, `logs`
+  - `vendor/AbletonOSC/.provenance` (NEW) — records source, date, and the two added handlers
+  - `vendor/AbletonOSC/abletonosc/track.py` (EDIT) — added `/live/track/arrangement_writer_version` write-free handler returning `("ableset-1",)` for `probeHandler()` fork detection; `duplicate_clip_to_arrangement` handler was already present from spike
+  - `scripts/install-remote-script.mjs` (NEW) — copies `vendor/AbletonOSC/` to `~/Music/Ableton/User Library/Remote Scripts/AbletonOSC/` with timestamped backup, exports `copyTree(src, dest)` + `shouldSkip(name)` helpers for unit testing
+  - `scripts/install-remote-script.test.mjs` (NEW) — 10 vitest tests: 4 for `shouldSkip`, 6 for `copyTree` (creates dest, copies files+dirs, correct content, excludes `__pycache__`, excludes `.bak-`, idempotent); uses real tmpdir, never touches ~/Music
+  - `package.json` (EDIT) — added `"install:remote-script"` npm script; added `extraResources` for `vendor/AbletonOSC/` → `AbletonOSC` in Electron builder config
+  - `vitest.config.ts` (EDIT) — added `scripts/**/*.test.mjs` to include pattern
+  - `docs/ai/testing-guide.md` (EDIT) — updated unit-test file list; expanded manual-only section with link to `docs/testing/manual-smoke.md` and summary of all 6 live-apply smokes
+  - `docs/testing/manual-smoke.md` (NEW) — 6 manual smoke scenarios: install+load in Live, handler-presence probe, apply-lyrics round-trip, AbleSet reads live-placed clips, handler-absent banner (negative), existing export unaffected
+- Checks run:
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (100 tests: 90 prior + 10 new copyTree/shouldSkip)
+  - `npm run build` — PASS
+- Decisions made:
+  - `arrangement_writer_version` handler is a bare (non-per-track) handler registered directly on `osc_server` — takes any params (ignored), returns `("ableset-1",)`. This avoids requiring a valid track index for a version probe, keeping it truly write-free.
+  - `copyTree` test lives in `scripts/install-remote-script.test.mjs` (ESM, no TypeScript) to avoid cross-package TS module resolution issues when importing a `.mjs` from a `.ts` test. Vitest config updated to pick up `scripts/**/*.test.mjs`.
+  - Did NOT run `install:remote-script` against `~/Music` — the spec required a mock/temp fs test only, not a live install. `copyTree` is tested against a real tmpdir.
+- Deviations from spec: none
+- Concerns:
+  - `extraResources` in `package.json` references `vendor/AbletonOSC` → the installed `.app` will bundle ~20 Python files as resources. Total size is small (~150 KB) but untested in the packaged electron:dist build (not run here per spec — e2e skipped as no client code changed).
+  - The vendored `vendor/AbletonOSC/client/` and `vendor/AbletonOSC/tests/` subdirs were copied from the user's install. These are test/client utilities from upstream ideoforms/AbletonOSC and are not harmful to include, but could be trimmed in a follow-up to reduce bundle size.
