@@ -1,0 +1,24 @@
+{
+  "run_id": "2026-06-05-live-stamp-write-pass",
+  "issue": 32,
+  "date": "2026-06-05",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": false,
+  "summary": "Final manual + packaged-build smoke of live-stamp-write (proof-then-apply) PASSED. User confirmed the create-track inline flow works in Electron; 'Apply to Ableton' writes clips into the live Arrangement spanning to the next stamp; AbleSet reads them. Packaged .app build (electron:dist, signed, vendor/AbletonOSC bundled) + app-target e2e: 35/35 green. Two prior smoke failures (1-beat clips; window.prompt unsupported in Electron) were fixed and re-verified earlier this run.",
+  "criteria_results": [
+    { "criterion_id": "la-apply", "text": "Apply writes named clips into the Arrangement at correct beats", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "Live-confirmed; AbleSet reads them." },
+    { "criterion_id": "la-length", "text": "Clips span to the next stamp", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "Fixed (stampsToClips length); live probe clip@4 length 8." },
+    { "criterion_id": "la-create", "text": "Create new +LYRICS track from the picker", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "Inline input (window.prompt removed); user-confirmed working in Electron." }
+  ],
+  "process_issues": [
+    "Both smoke failures this run were Electron-only gaps invisible to the build-target e2e (Chromium): clip-length behavior and window.prompt. Recommend an Electron-target smoke (test:e2e:build is now wired and green) be part of pre-handoff verification for renderer/Electron-affecting changes."
+  ],
+  "workflow_adherence": {
+    "expected_chain": ["coding-agent", "verification-gate", "manual-smoke", "failure-postmortem", "repair-loop", "verification-gate", "packaged-smoke"],
+    "observed_chain": ["planning", "coding-agent x4", "verification-gate PASS", "manual-smoke (2 fails → fixed → re-verified)", "failure-postmortem x2", "manual-smoke PASS", "packaged build + app-target e2e 35/35", "failure-postmortem (this, pass)"],
+    "skipped_skills": [],
+    "issues": [],
+    "overall_score": "strict"
+  }
+}
