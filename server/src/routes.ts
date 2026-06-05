@@ -2,7 +2,7 @@ import type http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { parseChordPro } from './chordpro.js';
-import { writeAlsFile, type AlsTrackSpec } from './als-writer.js';
+import { writeAlsFile, DEFAULT_CLIP_LENGTH, type AlsTrackSpec } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
 import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
 import {
@@ -12,6 +12,17 @@ import {
   getSessionPdf,
   deleteSession,
 } from './session-store.js';
+import type { OscClient } from './osc-client.js';
+
+// ---------------------------------------------------------------------------
+// OscClient injection (set once on startup; used by live-write routes)
+// ---------------------------------------------------------------------------
+
+let _oscClient: OscClient | null = null;
+
+export function setOscClient(client: OscClient): void {
+  _oscClient = client;
+}
 
 // Resolved lazily at request time so that ELECTRON_STATIC_DIR set by
 // electron/main.ts (after app is ready) is visible. Fallback to out/renderer
@@ -472,6 +483,219 @@ async function handlePostExportZip(
 }
 
 // ---------------------------------------------------------------------------
+// Live-write routes (Issue C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert an array of LyricStamps (song-relative) into the { name, beat }
+ * pairs that writeStampClip expects. This is the single source of truth for
+ * clip-name formatting — identical output to the /api/export/als route so
+ * live-applied clips and .als export clips carry the same names.
+ *
+ * Each stamp's `text` field (per-stamp override) takes precedence over the
+ * song line text, matching how the .als export builds clip names.
+ */
+export function stampsToClips(
+  song: { lines: Array<{ text?: string }> },
+  stamps: Array<{ idx: number; ts: number; text?: string }>,
+): Array<{ name: string; beat: number; length: number }> {
+  // Each clip extends to the NEXT stamp's beat so AbleSet shows the lyric until
+  // the next line (it only displays a lyric while its clip is active). The last
+  // clip falls back to DEFAULT_CLIP_LENGTH. Identical to the .als export
+  // (als-writer: end = next beat, last = start + DEFAULT_CLIP_LENGTH).
+  return stamps.map((stamp, idx) => {
+    const beat = stamp.ts;
+    const next = stamps[idx + 1];
+    const length = next && next.ts > beat ? next.ts - beat : DEFAULT_CLIP_LENGTH;
+    return {
+      name: stamp.text ?? song.lines[stamp.idx]?.text ?? '',
+      beat,
+      length,
+    };
+  });
+}
+
+async function handleGetLiveTracks(
+  _req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  if (_oscClient === null || !_oscClient.connected) {
+    json(res, 503, { error: 'Ableton not connected' });
+    return;
+  }
+  try {
+    const tracks = await _oscClient.listTracks();
+    json(res, 200, tracks);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    json(res, 503, { error: `Failed to list tracks: ${message}` });
+  }
+}
+
+/**
+ * POST /api/live/tracks
+ * Body: { name?: string }
+ * Creates a new MIDI track in the live Ableton session and returns its index + name.
+ * The final name has ` +LYRICS` appended if not already present (case-insensitive).
+ * Empty or missing name defaults to "Lyrics +LYRICS".
+ */
+async function handlePostLiveTracks(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  if (_oscClient === null || !_oscClient.connected) {
+    json(res, 503, { error: 'Ableton not connected' });
+    return;
+  }
+
+  let raw: string;
+  try {
+    raw = await readBody(req);
+  } catch {
+    json(res, 400, { error: 'Failed to read request body' });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = raw.trim() === '' ? {} : JSON.parse(raw);
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    json(res, 400, { error: 'Body must be a JSON object' });
+    return;
+  }
+
+  const b = body as Record<string, unknown>;
+
+  if (b.name !== undefined && typeof b.name !== 'string') {
+    json(res, 400, { error: 'name must be a string' });
+    return;
+  }
+
+  // Compute the final track name: trim, append +LYRICS if absent, default to "Lyrics +LYRICS"
+  const rawName = (typeof b.name === 'string' ? b.name : '').trim();
+  let finalName: string;
+  if (rawName === '') {
+    finalName = 'Lyrics +LYRICS';
+  } else if (/\+lyrics/i.test(rawName)) {
+    finalName = rawName;
+  } else {
+    finalName = `${rawName} +LYRICS`;
+  }
+
+  try {
+    const track = await _oscClient.createLyricsTrack(finalName);
+    json(res, 200, track);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.toLowerCase().includes('not connected') || message.toLowerCase().includes('timeout')) {
+      json(res, 503, { error: `Failed to create track: ${message}` });
+    } else {
+      json(res, 500, { error: `Failed to create track: ${message}` });
+    }
+  }
+}
+
+async function handlePostLiveApply(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  if (_oscClient === null || !_oscClient.connected) {
+    json(res, 503, { error: 'Ableton not connected' });
+    return;
+  }
+
+  let raw: string;
+  try {
+    raw = await readBody(req);
+  } catch {
+    json(res, 400, { error: 'Failed to read request body' });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    json(res, 400, { error: 'Body must be a JSON object' });
+    return;
+  }
+
+  const b = body as Record<string, unknown>;
+
+  if (typeof b.trackIndex !== 'number') {
+    json(res, 400, { error: 'Missing or invalid field: trackIndex (number)' });
+    return;
+  }
+
+  // Accept { trackIndex, song, stamps } — compute clip names server-side from
+  // the song lines + per-stamp text overrides, identical to the .als export.
+  if (
+    typeof b.song !== 'object' ||
+    b.song === null ||
+    !Array.isArray((b.song as Record<string, unknown>).lines)
+  ) {
+    json(res, 400, { error: 'Missing or invalid field: song (object with lines array)' });
+    return;
+  }
+
+  if (!Array.isArray(b.stamps)) {
+    json(res, 400, { error: 'Missing or invalid field: stamps (array)' });
+    return;
+  }
+
+  const rawStamps = b.stamps as unknown[];
+
+  for (let i = 0; i < rawStamps.length; i++) {
+    const s = rawStamps[i];
+    if (
+      typeof s !== 'object' ||
+      s === null ||
+      typeof (s as Record<string, unknown>).idx !== 'number' ||
+      typeof (s as Record<string, unknown>).ts !== 'number'
+    ) {
+      json(res, 400, {
+        error: `stamps[${i}] must have idx (number) and ts (number)`,
+      });
+      return;
+    }
+  }
+
+  const songObj = b.song as { lines: Array<{ text?: string }> };
+  const stampInputs = rawStamps as Array<{ idx: number; ts: number; text?: string }>;
+  const clips = stampsToClips(songObj, stampInputs);
+  const trackIndex = b.trackIndex as number;
+
+  let written = 0;
+  const failed: { name: string; beat: number; error: string }[] = [];
+
+  // Write clips sequentially — they all reuse scratch slot 0; concurrent writes would collide.
+  for (const clip of clips) {
+    try {
+      await _oscClient.writeStampClip(trackIndex, clip.name, clip.beat, clip.length);
+      written++;
+    } catch (err) {
+      failed.push({
+        name: clip.name,
+        beat: clip.beat,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  json(res, 200, { written, failed });
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -506,6 +730,23 @@ export async function handleRequest(
 
   if (method === 'POST' && path === '/api/export/zip') {
     await handlePostExportZip(req, res);
+    return;
+  }
+
+  // ---- Live-write routes ----
+
+  if (method === 'GET' && path === '/api/live/tracks') {
+    await handleGetLiveTracks(req, res);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/live/tracks') {
+    await handlePostLiveTracks(req, res);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/live/apply') {
+    await handlePostLiveApply(req, res);
     return;
   }
 

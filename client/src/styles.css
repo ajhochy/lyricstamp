@@ -1059,3 +1059,50 @@ html, body {
   background: var(--fg-4);
   display: inline-block;
 }
+
+/* ============= Live track picker (issues E/F) ============= */
+.live-track-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.select {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  background: var(--bg-2);
+  color: var(--fg-1);
+  border: 1px solid var(--line-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  max-width: 180px;
+}
+
+.select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.apply-btn {
+  white-space: nowrap;
+}
+
+/* ============= Handler-absent banner (issue G) ============= */
+.handler-absent-banner {
+  background: color-mix(in oklch, var(--warn) 14%, transparent);
+  border-bottom: 1px solid color-mix(in oklch, var(--warn) 32%, transparent);
+  color: var(--warn);
+  font-size: 12px;
+  padding: 6px 16px;
+  text-align: center;
+}
+
+.handler-absent-banner code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: color-mix(in oklch, var(--warn) 10%, transparent);
+  padding: 1px 4px;
+  border-radius: 3px;
+}

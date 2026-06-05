@@ -3,7 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { OscClient } from './osc-client.js';
 import { attachWebSocketServer } from './ws-server.js';
-import { handleRequest } from './routes.js';
+import { handleRequest, setOscClient } from './routes.js';
 
 const HOST = '127.0.0.1';
 const PORT = 7878;
@@ -15,6 +15,9 @@ export async function start(): Promise<void> {
   oscClient.on('connection', ({ connected }) => {
     console.log(`[server] Ableton Live ${connected ? 'connected' : 'disconnected'}`);
   });
+
+  // Wire the OSC client into routes so live-write endpoints can use it.
+  setOscClient(oscClient);
 
   oscClient.start();
 

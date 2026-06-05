@@ -23,8 +23,10 @@ export type Song = {
   lines: Array<{ section?: string; text?: string }>;
 };
 
+export type HandlerStatus = 'present' | 'absent' | 'unknown';
+
 export type LiveMsg =
-  | { type: 'tick'; ts: number; bpm: number; playing: boolean; numerator: number; denominator: number }
+  | { type: 'tick'; ts: number; bpm: number; playing: boolean; numerator: number; denominator: number; handlerStatus: HandlerStatus }
   | { type: 'connection'; connected: boolean }
   | { type: 'song'; bpm: number; tempo: number; signature: string };
 

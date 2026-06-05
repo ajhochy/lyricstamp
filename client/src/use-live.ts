@@ -4,7 +4,7 @@
 // and sendCommand sends a ClientMsg to the server over the same socket.
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { LiveMsg, ClientMsg } from '../../shared/types';
+import type { LiveMsg, ClientMsg, HandlerStatus } from '../../shared/types';
 
 export type LiveState = {
   ts: number;
@@ -13,6 +13,7 @@ export type LiveState = {
   numerator: number;
   denominator: number;
   connected: boolean; // true only when WS is alive AND Ableton OSC handshake succeeded
+  handlerStatus: HandlerStatus; // 'present' | 'absent' | 'unknown'
 };
 
 export type UseLiveReturn = {
@@ -27,6 +28,7 @@ const INITIAL_STATE: LiveState = {
   numerator: 4,
   denominator: 4,
   connected: false,
+  handlerStatus: 'unknown',
 };
 
 const BACKOFF_START_MS = 500;
@@ -80,6 +82,7 @@ export function useLive(): UseLiveReturn {
             playing: msg.playing,
             numerator: msg.numerator,
             denominator: msg.denominator,
+            handlerStatus: msg.handlerStatus,
           }));
         } else if (msg.type === 'connection') {
           setState((prev) => ({ ...prev, connected: msg.connected }));

@@ -23,7 +23,7 @@ npm test
 # or
 npx vitest run --passWithNoTests
 ```
-Tests live in `server/src/*.test.ts`. Currently covers: `als-writer`, `chordpro`, `zip-packer`, `session-store`.
+Tests live in `server/src/*.test.ts` and `scripts/*.test.mjs`. Currently covers: `als-writer`, `chordpro`, `zip-packer`, `session-store`, `osc-client`, `routes`, `install-remote-script`.
 
 ### E2E / integration tests (Playwright)
 ```bash
@@ -52,8 +52,16 @@ npm run electron:dist    # package .app / .dmg (runs electron:build first)
 ```
 
 ## Manual-only checks
-- Ableton Live connection (requires Ableton + AbletonOSC installed)
-- Space/arrow key stamping (requires live Ableton session)
+
+Full manual smoke checklist: **`docs/testing/manual-smoke.md`**
+
+High-level summary:
+- `npm run install:remote-script` — installs `vendor/AbletonOSC/` to Ableton's remote scripts directory; requires Ableton Live on macOS
+- Ableton Live connection (requires Ableton + AbletonOSC installed and loaded)
+- Handler-presence probe: app must show no "Remote script not loaded" banner after connecting
+- Space/arrow key stamping + "Apply to Ableton" button: verify clips appear in Arrangement with correct names and beat positions
+- AbleSet iPad app reads live-placed clips identically to `.als`-generated clips
+- Handler-absent banner appears when unpatched (stock) AbletonOSC is loaded
 - `.als` export opens correctly in Ableton Live 12 (cross-version: Live 11 compat unverified)
 - Leadsheet `.zip` export opens correctly in AbleSet iPad app
 - Packaged `.app` / DMG: Electron window loads UI without "Not found" error (production static-serving path)

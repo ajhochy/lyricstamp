@@ -74,7 +74,7 @@ export function App() {
 
   // Playback — driven by WebSocket (#17) and controlled via WebSocket (#18)
   const { state: liveState, sendCommand } = useLive();
-  const { ts: time, bpm: liveBpm, playing: liveConnectedPlaying, connected, numerator, denominator } = liveState;
+  const { ts: time, bpm: liveBpm, playing: liveConnectedPlaying, connected, numerator, denominator, handlerStatus } = liveState;
 
   // Format a beat position as Bar.Beat.Sixteenth using the live time signature.
   const formatPos = useCallback(
@@ -128,6 +128,117 @@ export function App() {
     setToasts((arr) => [...arr, { id, msg, meta }]);
     setTimeout(() => setToasts((arr) => arr.filter((t) => t.id !== id)), 2400);
   }, []);
+
+  // ---- Live track picker (issue E/F/G) ----
+  // Persistent selected track index (null = nothing selected yet).
+  const [liveTrackIndex, setLiveTrackIndex] = usePersistentState<number | null>('liveTrackIndex', null);
+  // Track list fetched from Ableton when connected.
+  const [liveTracks, setLiveTracks] = useState<{ index: number; name: string }[]>([]);
+  const [applyingToAbleton, setApplyingToAbleton] = useState<boolean>(false);
+  // Inline "new +LYRICS track" creation (window.prompt is unsupported in Electron).
+  const [creatingTrack, setCreatingTrack] = useState<boolean>(false);
+  const [newTrackName, setNewTrackName] = useState<string>('');
+
+  // Fetch track list from server whenever Ableton connects (connected flips to true).
+  useEffect(() => {
+    if (!connected) {
+      setLiveTracks([]);
+      return;
+    }
+    fetch('/api/live/tracks')
+      .then((r) => (r.ok ? r.json() as Promise<{ index: number; name: string }[]> : Promise.resolve([])))
+      .then((tracks) => setLiveTracks(tracks))
+      .catch(() => setLiveTracks([]));
+  }, [connected]);
+
+  // Apply all proofed stamps to Ableton in a batch.
+  const applyToAbleton = useCallback(async () => {
+    if (!connected) {
+      pushToast('Ableton not connected');
+      return;
+    }
+    if (handlerStatus === 'absent') {
+      pushToast('Remote script not loaded', 'Run npm run install:remote-script');
+      return;
+    }
+    if (liveTrackIndex === null) {
+      pushToast('Select a track first');
+      return;
+    }
+    if (stamps.length === 0) {
+      pushToast('No stamps to apply');
+      return;
+    }
+    setApplyingToAbleton(true);
+    try {
+      const res = await fetch('/api/live/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackIndex: liveTrackIndex, song, stamps }),
+      });
+      if (!res.ok) {
+        let errMsg = 'Unknown error';
+        try {
+          const body = await res.json() as { error?: string };
+          errMsg = body.error ?? errMsg;
+        } catch { /* ignore */ }
+        pushToast(`Apply failed: ${errMsg}`);
+        return;
+      }
+      const result = await res.json() as { written: number; failed: { name: string; beat: number; error: string }[] };
+      if (result.failed.length === 0) {
+        pushToast(`Wrote ${result.written} clips`, `Track ${liveTrackIndex}`);
+      } else {
+        pushToast(
+          `Wrote ${result.written}, failed ${result.failed.length}`,
+          result.failed.map((f) => f.name).join(', '),
+        );
+      }
+    } catch {
+      pushToast('Apply failed: backend unreachable');
+    } finally {
+      setApplyingToAbleton(false);
+    }
+  }, [connected, handlerStatus, liveTrackIndex, stamps, song, pushToast]);
+
+  // Create a new +LYRICS track from the inline editor (window.prompt is
+  // unsupported in Electron, so we use an inline input instead of a dialog).
+  const submitNewTrack = useCallback(async () => {
+    const name = newTrackName.trim() || 'Lyrics';
+    try {
+      const r = await fetch('/api/live/tracks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        let errMsg = 'Unknown error';
+        try { errMsg = ((await r.json()) as { error?: string }).error ?? errMsg; } catch { /* ignore */ }
+        pushToast(`Create track failed: ${errMsg}`);
+        return;
+      }
+      const created = await r.json() as { index: number; name: string };
+      const list = await fetch('/api/live/tracks')
+        .then((r2) => (r2.ok ? r2.json() as Promise<{ index: number; name: string }[]> : Promise.resolve([])))
+        .catch(() => [] as { index: number; name: string }[]);
+      setLiveTracks(list);
+      setLiveTrackIndex(created.index);
+      setCreatingTrack(false);
+      pushToast(`Created "${created.name}"`);
+    } catch {
+      pushToast('Create track failed: backend unreachable');
+    }
+  }, [newTrackName, pushToast, setLiveTrackIndex]);
+
+  // Reason why the Apply button is disabled (null = enabled).
+  const applyDisabledReason = useMemo<string | null>(() => {
+    if (!connected) return 'Ableton not connected';
+    if (handlerStatus === 'absent') return 'Remote script not loaded';
+    if (handlerStatus === 'unknown') return 'Checking remote script…';
+    if (liveTrackIndex === null) return 'No track selected';
+    if (stamps.length === 0) return 'No stamps to apply';
+    return null;
+  }, [connected, handlerStatus, liveTrackIndex, stamps.length]);
 
   // Leadsheet
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -810,6 +921,84 @@ export function App() {
               </div>
             )}
           </div>
+          {/* Track picker — shown in lyrics tab when Ableton is connected */}
+          {tab === 'lyrics' && (
+            <div className="live-track-picker">
+              <select
+                className="select"
+                aria-label="Ableton track"
+                value={liveTrackIndex ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '__create__') {
+                    // Open the inline name editor. Electron has no prompt dialog,
+                    // so we use an inline input instead of a modal.
+                    setNewTrackName(songName.trim() || 'Lyrics');
+                    setCreatingTrack(true);
+                  } else {
+                    setLiveTrackIndex(val === '' ? null : Number(val));
+                  }
+                }}
+                disabled={!connected || liveTracks.length === 0}
+                title={connected ? (liveTracks.length === 0 ? 'No tracks available' : 'Select target track') : 'Ableton not connected'}
+              >
+                <option value="">— track —</option>
+                {liveTracks.map((t) => (
+                  <option key={t.index} value={t.index}>
+                    {t.name.includes('+LYRICS') ? `★ ${t.name}` : t.name}
+                  </option>
+                ))}
+                {connected && (
+                  <option value="__create__">➕ New +LYRICS track…</option>
+                )}
+              </select>
+              <button
+                className="btn"
+                disabled={!connected}
+                title="Refresh track list"
+                aria-label="Refresh Ableton tracks"
+                onClick={() => {
+                  if (!connected) return;
+                  fetch('/api/live/tracks')
+                    .then((r) => (r.ok ? r.json() as Promise<{ index: number; name: string }[]> : Promise.resolve([])))
+                    .then((tracks) => setLiveTracks(tracks))
+                    .catch(() => {});
+                }}
+              >
+                ↺
+              </button>
+              {creatingTrack && (
+                <span className="new-track-inline">
+                  <input
+                    className="input"
+                    autoFocus
+                    value={newTrackName}
+                    placeholder="Track name"
+                    aria-label="New track name"
+                    onChange={(e) => setNewTrackName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); void submitNewTrack(); }
+                      else if (e.key === 'Escape') { e.preventDefault(); setCreatingTrack(false); }
+                    }}
+                  />
+                  <button className="btn primary" onClick={() => void submitNewTrack()}>Create</button>
+                  <button className="btn" onClick={() => setCreatingTrack(false)}>Cancel</button>
+                </span>
+              )}
+            </div>
+          )}
+          {/* Apply to Ableton — only in lyrics tab */}
+          {tab === 'lyrics' && (
+            <button
+              className="btn apply-btn"
+              onClick={() => { void applyToAbleton(); }}
+              disabled={applyDisabledReason !== null || applyingToAbleton}
+              title={applyDisabledReason ?? 'Write all stamps to Ableton Arrangement'}
+              data-apply-reason={applyDisabledReason ?? undefined}
+            >
+              {applyingToAbleton ? 'Applying…' : 'Apply to Ableton'}
+            </button>
+          )}
           <button
             className="btn primary"
             onClick={exportFile}
@@ -822,6 +1011,15 @@ export function App() {
           </button>
         </div>
       </header>
+
+      {/* Handler-absent banner (issue G) — shown when remote script is not loaded */}
+      {handlerStatus === 'absent' && (
+        <div className="handler-absent-banner" role="alert">
+          Remote script not loaded — run{' '}
+          <code>npm run install:remote-script</code>
+          {' '}and restart Ableton.
+        </div>
+      )}
 
       {/* MAIN */}
       <div className="main">

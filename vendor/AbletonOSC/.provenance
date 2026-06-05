@@ -1,0 +1,14 @@
+source: ideoforms/AbletonOSC (https://github.com/ideoforms/AbletonOSC)
+date: 2026-06-05
+vendored-from: ~/Music/Ableton/User Library/Remote Scripts/AbletonOSC/
+
+Handlers added over stock ideoforms/AbletonOSC:
+1. /live/track/duplicate_clip_to_arrangement  (track_index, clip_index, dest_beat)
+   Places a named session clip into the Arrangement at a beat position.
+   Added during ableset-lyrics-sync spike (spike/arrangement-live-write).
+
+2. /live/track/arrangement_writer_version  (no args)
+   Write-free version probe: returns ("ableset-1",) so the app can detect
+   this fork is loaded without performing any arrangement write.
+
+See docs/ai/decisions.md (2026-06-05 entry) for fork context and upstream-drift strategy.

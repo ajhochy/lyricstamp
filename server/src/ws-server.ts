@@ -3,7 +3,7 @@ import type { Server } from 'node:http';
 import { URL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { OscClient } from './osc-client.js';
-import type { LiveMsg, ClientMsg } from '../../shared/types.js';
+import type { LiveMsg, ClientMsg, HandlerStatus } from '../../shared/types.js';
 
 const PING_INTERVAL_MS = 30_000;
 
@@ -14,6 +14,9 @@ export function attachWebSocketServer(httpServer: Server, oscClient: OscClient):
   // Track the most recent state so new clients get immediate data
   let lastTick: Extract<LiveMsg, { type: 'tick' }> | null = null;
   let lastConnection: Extract<LiveMsg, { type: 'connection' }> | null = null;
+
+  // Handler-presence probe result (Issue D)
+  let handlerStatus: HandlerStatus = 'unknown';
 
   function broadcast(msg: LiveMsg): void {
     const json = JSON.stringify(msg);
@@ -26,7 +29,7 @@ export function attachWebSocketServer(httpServer: Server, oscClient: OscClient):
 
   // Subscribe to OSC events
   oscClient.on('tick', (payload) => {
-    const msg: LiveMsg = { type: 'tick', ...payload };
+    const msg: LiveMsg = { type: 'tick', ...payload, handlerStatus };
     lastTick = msg;
     broadcast(msg);
   });
@@ -35,6 +38,26 @@ export function attachWebSocketServer(httpServer: Server, oscClient: OscClient):
     const msg: LiveMsg = { type: 'connection', ...payload };
     lastConnection = msg;
     broadcast(msg);
+
+    if (payload.connected) {
+      // Reset to 'unknown' immediately so the next tick reflects the probe state
+      handlerStatus = 'unknown';
+      // Probe asynchronously; update handlerStatus when done
+      oscClient.probeHandler().then((present) => {
+        handlerStatus = present ? 'present' : 'absent';
+        // Broadcast an updated tick if we have one so clients learn immediately
+        if (lastTick !== null) {
+          const updated: LiveMsg = { ...lastTick, handlerStatus };
+          lastTick = updated;
+          broadcast(updated);
+        }
+      }).catch(() => {
+        handlerStatus = 'absent';
+      });
+    } else {
+      // Reset on disconnect
+      handlerStatus = 'unknown';
+    }
   });
 
   // Handle HTTP upgrades — only accept /live path

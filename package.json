@@ -23,7 +23,8 @@
     "postinstall": "npm run copy:pdf-worker",
     "electron:dev": "electron-vite dev",
     "electron:build": "electron-vite build",
-    "electron:dist": "npm run electron:build && electron-builder"
+    "electron:dist": "npm run electron:build && electron-builder",
+    "install:remote-script": "node scripts/install-remote-script.mjs"
   },
   "build": {
     "appId": "com.ableset-lyrics-sync",
@@ -34,6 +35,12 @@
     "files": [
       "out/**/*",
       "templates/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/AbletonOSC",
+        "to": "AbletonOSC"
+      }
     ],
     "mac": {
       "icon": "assets/icon.icns",
