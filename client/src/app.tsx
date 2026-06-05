@@ -291,6 +291,12 @@ export function App() {
   const nextLine =
     nextTextIdx != null ? (song.lines[nextTextIdx]?.text ?? null) : null;
 
+  // The previous lyric line — the one just stamped / currently playing. Shown
+  // above the "next to stamp" target so the operator can follow along.
+  const prevTextIdx = useMemo(() => findNextTextLine(cursor, -1), [cursor, findNextTextLine]);
+  const prevLine =
+    prevTextIdx != null ? (song.lines[prevTextIdx]?.text ?? null) : null;
+
   // Section header (preceding) for current line
   const currentSectionLabel = useMemo(() => {
     // Guard against an empty song (lines: []) or a cursor that points past the
@@ -800,6 +806,7 @@ export function App() {
             setSetupOpen={setSetupOpen}
             currentLine={currentLineObj.text}
             currentSection={currentSectionLabel}
+            prevLine={prevLine}
             nextLine={nextLine}
             lineIndex={lineIndexOfCursor}
             lineTotal={lineCount}

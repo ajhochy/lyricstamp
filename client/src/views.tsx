@@ -50,6 +50,7 @@ export interface LyricsViewProps {
   setSetupOpen: (open: boolean) => void;
   currentLine: string | undefined;
   currentSection: string | null | undefined;
+  prevLine: string | null | undefined;
   nextLine: string | null | undefined;
   lineIndex: number;
   lineTotal: number;
@@ -65,7 +66,7 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
   const {
     songName, setSongName, pasteText, setPasteText, onReload, reloading, lineCount,
     setupOpen, setSetupOpen,
-    currentLine, currentSection, nextLine,
+    currentLine, currentSection, prevLine, nextLine,
     lineIndex, lineTotal,
     stampRows, stampsCount, onUndo, onSeek,
     logScrollRef, tweaks,
@@ -130,6 +131,12 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
         <div className="viewer">
           {tweaks.showSectionHeaders && currentSection && (
             <div className="section-eyebrow">{currentSection}</div>
+          )}
+          {prevLine && (
+            <>
+              <div className="lyric-now-label">Now playing</div>
+              <div className="lyric-prev">{prevLine}</div>
+            </>
           )}
           <div className="stamp-target-label">Next to stamp &rarr;</div>
           <div className="lyric-current next-up" key={currentLine}>

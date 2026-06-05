@@ -583,6 +583,29 @@ html, body {
   margin-bottom: 8px;
 }
 
+/* "Now playing" — the previously-stamped line, shown above the next target so
+   the operator can follow along and time the next stamp. */
+.lyric-now-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-strong);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+}
+.lyric-prev {
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--fg-2);
+  text-align: center;
+  text-wrap: balance;
+  max-width: 900px;
+  margin-bottom: 28px;
+}
+
 .lyric-current {
   font-size: var(--lyric-size, 64px);
   font-weight: 600;
