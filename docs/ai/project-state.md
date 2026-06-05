@@ -47,6 +47,28 @@ _Last updated: 2026-06-05_
 
 ## Recent coding-agent runs
 
+### 2026-06-05 — afterSign notarization hook
+- Files modified:
+  - `scripts/notarize.cjs` (NEW) — electron-builder `afterSign` hook; no-ops when Apple credentials absent; API-key path preferred, Apple-ID fallback; staples ticket after notarization
+  - `scripts/notarize.test.mjs` (NEW) — 3 vitest tests: no-op when no creds (darwin), no-op on non-darwin, throws when .app missing but creds present
+  - `package.json` (EDIT) — added `"afterSign": "scripts/notarize.cjs"` to `build`; added `"notarize": false` to `build.mac` to disable electron-builder's built-in notarize path
+  - `docs/release-notarization.md` (NEW) — documents 5 GitHub secrets, how to obtain each, `gh secret set` commands, how to trigger a release, and local build behaviour
+  - `docs/ai/testing-guide.md` (EDIT) — added Notarization section with pointer to release-notarization.md
+  - `docs/ai/decisions.md` (EDIT) — added dated entry explaining double-notarize risk and `notarize: false` rationale
+- Checks run:
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (117 tests: 100 prior + 17 new — 3 notarize hook tests + new total from prior run)
+  - `npm run electron:dist` — PASS; logged `[notarize] no credentials in env — skipping notarization (local build)` and `skipped macOS notarization reason=`notarize` options were set explicitly `false``
+- Decisions made:
+  - Set `"mac": { "notarize": false }` to disable electron-builder 26's built-in `notarizeIfProvided()` — both the afterSign hook and the built-in path detect the same `APPLE_API_KEY*` env vars; without `false`, both would run and double-submit to Apple's notary service. See `docs/ai/decisions.md` 2026-06-05 entry.
+  - `@electron/notarize` v2.5.0 uses `notarytool` path (not deprecated `altool`); API params are `{ appPath, appleApiKey, appleApiKeyId, appleApiIssuer }` — no `appBundleId` or `tool` param needed.
+  - Stapling via `xcrun stapler staple` runs inside the same try/catch as `notarize()` so a staple failure fails the build (not silently skipped).
+- Deviations from spec: none
+- Concerns:
+  - `@electron/notarize` is a transitive dep (via electron-builder) — not listed in package.json `devDependencies`. If electron-builder is ever removed or its version changes the transitive dep could disappear. Low risk in the short term; a follow-up can pin it directly.
+  - Local signing still uses the developer's personal keychain (SHA-1 fingerprint in `sign.cjs`). Notarization won't work locally even if creds were set because the sign step in `sign.cjs` requires the Developer ID cert in the keychain — this is expected; notarize is CI-only.
+
 ### 2026-06-05 — "Create new +LYRICS track" option (Model 2 increment)
 - Files modified:
   - `server/src/osc-client.ts` (EDIT) — added `ADDR_CREATE_MIDI_TRACK`, `ADDR_SET_TRACK_NAME`, `CREATE_TRACK_SETTLE_MS` constants; added `createLyricsTrack(name)` public method

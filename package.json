@@ -42,6 +42,7 @@
         "to": "AbletonOSC"
       }
     ],
+    "afterSign": "scripts/notarize.cjs",
     "mac": {
       "icon": "assets/icon.icns",
       "hardenedRuntime": true,
@@ -49,6 +50,7 @@
       "entitlements": "entitlements.plist",
       "entitlementsInherit": "entitlements.plist",
       "sign": "scripts/sign.cjs",
+      "notarize": false,
       "target": [
         {
           "target": "dmg"
