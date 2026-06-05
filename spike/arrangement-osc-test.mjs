@@ -47,12 +47,15 @@ const BEAT = 8.0;
     console.log('\n[0] ping /live/test');
     await request('/live/test', '/live/test').catch(() => console.log('  (no /live/test reply — continuing)'));
 
-    // 1. Create a MIDI track at the end; reply carries the new track index.
-    console.log('\n[1] create MIDI track');
-    const created = await request('/live/song/create_midi_track', '/live/song/create_midi_track', -1);
-    const trackIndex = Number(created[0]);
+    // 1. Create a MIDI track at the end. create_midi_track is fire-and-forget
+    //    (no reply), so derive the new index from num_tracks (which does reply):
+    //    appending at -1 lands the new track at the old track count.
+    console.log('\n[1] create MIDI track (index via num_tracks)');
+    const before = await request('/live/song/get/num_tracks', '/live/song/get/num_tracks');
+    const trackIndex = Number(before[0]);
+    await send('/live/song/create_midi_track', -1);
+    await sleep(400);
     console.log('    new track index =', trackIndex);
-    await sleep(200);
 
     // 2. Mark it as an AbleSet lyrics track so AbleSet would read its clips.
     console.log('\n[2] name the track +LYRICS');

@@ -56,8 +56,16 @@ in the arrangement near beat 8. Eyeball it in AbleSet afterward.
 
 - [x] LOM method confirmed to exist
 - [x] AbletonOSC handler patched + harness written
-- [ ] Live test run (named clip lands in arrangement at beat)
-- [ ] AbleSet reads the live-placed clip identically to `.als` output
+- [x] **Live test PASSED (2026-06-05)** — `/live/track/duplicate_clip_to_arrangement 5 0 8`
+      placed a clip named "SPIKE — Amazing grace" into the arrangement; read-back:
+      `arrangement_clips/name → "SPIKE — Amazing grace"`, `start_time → 8`. No `.als`, no import.
+- [ ] AbleSet reads the live-placed clip identically to `.als` output (manual check — open AbleSet)
+
+### Result
+Proven at the OSC/LOM layer: named `+LYRICS` clips can be written directly into the live
+Arrangement at exact beats. The export-zip/import step is avoidable **if** we ship/fork an
+AbletonOSC command (this one handler) alongside the app. Remaining risk is purely whether
+AbleSet ingests live-placed clips the same as `.als`-generated ones.
 
 If both unchecked boxes pass, the real implementation (a shipped/forked AbletonOSC
 command + app OSC integration to replace the `.als` export) routes through the normal
