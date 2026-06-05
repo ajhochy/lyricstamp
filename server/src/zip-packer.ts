@@ -1,12 +1,17 @@
 /**
  * zip-packer.ts
  *
- * Pure module that assembles the Leadsheet export zip in memory.
+ * Pure module that assembles the Leadsheet export zip in memory, matching the
+ * directory layout AbleSet's own Lyrics tool produces:
  *
- * The zip contains:
- *   Lyrics/<filename>   – one entry per unique page PNG
- *   stamps.json         – manifest: array of { ts, page, imageRef, region }
- *   Stamps.als          – pre-built Ableton Live file from als-writer
+ *   <projectFolder>/
+ *     <alsFilename>                      – the Ableton Set
+ *     stamps.json                        – our manifest (ignored by Ableset)
+ *     <imagesSubdir>/page-1.png …        – page images (imagesSubdir is under Lyrics/)
+ *
+ * AbleSet resolves [img:<path>] clip names relative to the "Lyrics" folder that
+ * sits next to the .als, so images live at <projectFolder>/Lyrics/<sub>/page-N.png
+ * and the clips reference them as [img:<sub>/page-N.png].
  */
 
 import archiver from 'archiver';
@@ -16,19 +21,24 @@ import archiver from 'archiver';
 // ---------------------------------------------------------------------------
 
 export type ZipPackerInput = {
+  /** Top-level Ableton project folder name, e.g. "Song - 4:4 - 68 BPM Project". */
+  projectFolder: string;
+  /** The .als filename inside the project folder, e.g. "Song.als". */
+  alsFilename: string;
+  /** Directory (under the project folder) holding page images, e.g. "Lyrics/song-leadsheet". */
+  imagesSubdir: string;
   /** Unique pages only — each filename maps to the decoded PNG bytes. */
   pages: Array<{ filename: string; pngBuffer: Buffer }>;
   /** Stamp manifest (pngDataUrl already stripped by the caller). */
   manifest: Array<{ ts: number; page: number; imageRef: string; region: string }>;
-  /** Pre-built Stamps.als buffer from als-writer. */
+  /** Pre-built .als buffer from als-writer. */
   stampsAls: Buffer;
 };
 
 /**
- * Build an in-memory zip buffer containing:
- * - `Lyrics/<filename>` for each page in `input.pages`
- * - `stamps.json` serialised from `input.manifest`
- * - `Stamps.als` at the zip root
+ * Build an in-memory zip whose single top-level entry is the Ableton project
+ * folder, containing the .als, the page images under `imagesSubdir`, and a
+ * `stamps.json` manifest.
  *
  * @returns A Promise that resolves to the complete zip as a Buffer.
  */
@@ -41,16 +51,16 @@ export function packLeadsheetZip(input: ZipPackerInput): Promise<Buffer> {
     archive.on('error', reject);
     archive.on('finish', () => resolve(Buffer.concat(chunks)));
 
-    // Add each unique page PNG under Lyrics/
+    const root = input.projectFolder;
+
+    // Page images under <projectFolder>/<imagesSubdir>/
     for (const page of input.pages) {
-      archive.append(page.pngBuffer, { name: `Lyrics/${page.filename}` });
+      archive.append(page.pngBuffer, { name: `${root}/${input.imagesSubdir}/${page.filename}` });
     }
 
-    // Add the stamp manifest (pretty-printed JSON)
-    archive.append(JSON.stringify(input.manifest, null, 2), { name: 'stamps.json' });
-
-    // Add the pre-built Ableton Live file at the zip root
-    archive.append(input.stampsAls, { name: 'Stamps.als' });
+    // Manifest + the Ableton Set inside the project folder
+    archive.append(JSON.stringify(input.manifest, null, 2), { name: `${root}/stamps.json` });
+    archive.append(input.stampsAls, { name: `${root}/${input.alsFilename}` });
 
     archive.finalize().catch(reject);
   });

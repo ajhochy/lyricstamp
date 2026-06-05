@@ -124,35 +124,48 @@ export class OscClient extends EventEmitter<OscClientEvents> {
   }
 
   /**
-   * Pause in place: stop playback and immediately restore the playhead to the
-   * last-known position so the timeline does not jump to beat 1.
+   * Pause in place: stop_playing leaves the Live playhead where it is — it does
+   * NOT rewind to the start (only start_playing rewinds, which is why resume
+   * uses continue_playing below).
    *
-   * AbletonOSC's stop_playing can reset the playhead. Sending
-   * set/current_song_time right after locks it back where it was.
+   * We deliberately do NOT pin the position with set/current_song_time here.
+   * Pinning froze Live's continue-point at the pause position, which made it
+   * impossible to return to zero from Ableton (the Stop button / dragging the
+   * playhead). Leaving current_song_time untouched lets Ableton drive resets:
+   * after an Ableton Stop, continue_playing resumes from wherever Live now is.
    */
   pausePlaying(): void {
-    const savedTs = this._lastTs ?? 0;
     this._send(ADDR_STOP_PLAYING);
-    this._sendWithValue(ADDR_SET_SONG_TIME, savedTs);
   }
 
   /**
-   * Resume playback from the current playhead position using continue_playing,
-   * which does not reset the timeline to beat 1 the way start_playing does.
+   * Resume from Live's current position using continue_playing, which does not
+   * rewind to the start the way start_playing does.
    */
   continuePlaying(): void {
     this._send(ADDR_CONTINUE_PLAYING);
   }
 
-  private _send(address: string): void {
-    if (this._oscClient === null) {
-      return;
-    }
-    this._oscClient.send(address, (err?: Error) => {
-      if (err) {
-        console.error(`[OSC] Send error for ${address}:`, err.message);
-      }
-    });
+  /**
+   * Stop and return the playhead to the start (beat 0).
+   *
+   * We set current_song_time explicitly rather than relying on Ableton's Stop
+   * button: continue_playing resumes from current_song_time, and that value
+   * does not always track the visible playhead when repositioned manually.
+   * Setting it here guarantees the next play starts from 0.
+   */
+  returnToStart(): void {
+    this._send(ADDR_STOP_PLAYING);
+    this._sendWithValue(ADDR_SET_SONG_TIME, 0);
+  }
+
+  /**
+   * Move the playhead to a specific position (in beats) without starting or
+   * stopping playback. If Live is playing, it jumps and keeps playing; if
+   * stopped, the next continue_playing resumes from here.
+   */
+  seek(beats: number): void {
+    this._sendWithValue(ADDR_SET_SONG_TIME, Math.max(0, beats));
   }
 
   private _sendWithValue(address: string, value: number): void {
@@ -160,6 +173,17 @@ export class OscClient extends EventEmitter<OscClientEvents> {
       return;
     }
     this._oscClient.send(address, value, (err?: Error) => {
+      if (err) {
+        console.error(`[OSC] Send error for ${address}:`, err.message);
+      }
+    });
+  }
+
+  private _send(address: string): void {
+    if (this._oscClient === null) {
+      return;
+    }
+    this._oscClient.send(address, (err?: Error) => {
       if (err) {
         console.error(`[OSC] Send error for ${address}:`, err.message);
       }

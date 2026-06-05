@@ -185,4 +185,67 @@ describe('writeAlsFile', () => {
       expect(xml).toContain('<MidiClip Id="1"');
     });
   });
+
+  describe('multi-track (tracks[] mode)', () => {
+    // Helper: return the substring for a given MidiTrack block (track 0 or 1).
+    function trackBlock(xml: string, index: 0 | 1): string {
+      const starts = [...xml.matchAll(/<MidiTrack Id="\d+"/g)].map((m) => m.index ?? -1);
+      const from = starts[index];
+      const to = index + 1 < starts.length ? starts[index + 1] : xml.length;
+      return xml.slice(from, to);
+    }
+
+    it('populates lyrics on the chart track and images on the leadsheet track', () => {
+      const result = writeAlsFile({
+        tracks: [
+          { track: 'chart', name: 'Vocals +LYRICS', stamps: [{ ts: 2, clipName: 'Amazing grace' }] },
+          { track: 'leadsheet', name: 'leadsheet +LYRICS [-2n]', stamps: [{ ts: 5, clipName: '[img:page1.png]' }] },
+        ],
+      });
+      const xml = gunzipToString(result);
+
+      const chart = trackBlock(xml, 0);
+      const leadsheet = trackBlock(xml, 1);
+
+      // Lyric clip is in the chart track, NOT the leadsheet track.
+      expect(chart).toContain('<Name Value="Amazing grace" />');
+      expect(chart).not.toContain('[img:page1.png]');
+      // Image clip is in the leadsheet track, NOT the chart track.
+      expect(leadsheet).toContain('<Name Value="[img:page1.png]" />');
+      expect(leadsheet).not.toContain('Amazing grace');
+    });
+
+    it('renames each track to its spec name', () => {
+      const result = writeAlsFile({
+        tracks: [
+          { track: 'chart', name: 'Vocals +LYRICS', stamps: [] },
+          { track: 'leadsheet', name: 'Sheet Pages', stamps: [] },
+        ],
+      });
+      const xml = gunzipToString(result);
+      expect(trackBlock(xml, 0)).toContain('<EffectiveName Value="Vocals +LYRICS" />');
+      expect(trackBlock(xml, 1)).toContain('<EffectiveName Value="Sheet Pages" />');
+    });
+
+    it('assigns globally-unique clip IDs across both tracks', () => {
+      const result = writeAlsFile({
+        tracks: [
+          { track: 'chart', name: 'L', stamps: [{ ts: 0, clipName: 'a' }, { ts: 1, clipName: 'b' }] },
+          { track: 'leadsheet', name: 'S', stamps: [{ ts: 0, clipName: 'c' }] },
+        ],
+      });
+      const xml = gunzipToString(result);
+      const ids = [...xml.matchAll(/<MidiClip Id="(\d+)"/g)].map((m) => m[1]);
+      expect(ids).toHaveLength(3);
+      expect(new Set(ids).size).toBe(3); // all unique
+    });
+
+    it('leaves the leadsheet track empty when only chart stamps are given', () => {
+      const result = writeAlsFile({
+        tracks: [{ track: 'chart', name: 'Vocals +LYRICS', stamps: [{ ts: 0, clipName: 'x' }] }],
+      });
+      const xml = gunzipToString(result);
+      expect(trackBlock(xml, 1)).not.toContain('<MidiClip ');
+    });
+  });
 });

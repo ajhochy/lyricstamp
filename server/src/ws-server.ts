@@ -97,6 +97,10 @@ export function attachWebSocketServer(httpServer: Server, oscClient: OscClient):
         oscClient.continuePlaying();
       } else if (clientMsg.action === 'pause') {
         oscClient.pausePlaying();
+      } else if (clientMsg.action === 'stop') {
+        oscClient.returnToStart();
+      } else if (clientMsg.action === 'seek' && typeof clientMsg.ts === 'number') {
+        oscClient.seek(clientMsg.ts);
       }
     });
 

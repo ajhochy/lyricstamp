@@ -28,4 +28,11 @@ export type LiveMsg =
   | { type: 'connection'; connected: boolean }
   | { type: 'song'; bpm: number; tempo: number; signature: string };
 
-export type ClientMsg = { type: 'transport'; action: 'play' | 'pause' };
+// Transport actions:
+//   play  — resume from the current playhead (continue_playing)
+//   pause — stop playback, leave the playhead where it is (stop_playing)
+//   stop  — stop AND return the playhead to the start (stop_playing + seek 0)
+//   seek  — move the playhead to `ts` (beats) without changing play state
+export type ClientMsg =
+  | { type: 'transport'; action: 'play' | 'pause' | 'stop' }
+  | { type: 'transport'; action: 'seek'; ts: number };

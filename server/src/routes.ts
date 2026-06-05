@@ -2,7 +2,7 @@ import type http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { parseChordPro } from './chordpro.js';
-import { writeAlsFile } from './als-writer.js';
+import { writeAlsFile, type AlsTrackSpec } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
 import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
 
@@ -135,10 +135,33 @@ async function handlePostSong(
 
 const MAX_STAMPS = 1000;
 
-/** Sanitize a song name for use as a filename. */
+/** Sanitize a song name for use as a download filename. */
 function sanitizeFilename(name: string): string {
   const sanitized = name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
   return sanitized.length > 0 ? sanitized : 'export';
+}
+
+/**
+ * Slugify a leadsheet/song name for the Lyrics subfolder, matching AbleSet's
+ * convention (lowercase, spaces and punctuation → single hyphens).
+ * e.g. "A Thousand Hallelujahs F Lead Sheet" → "a-thousand-hallelujahs-f-lead-sheet"
+ */
+function slugify(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return slug.length > 0 ? slug : 'leadsheet';
+}
+
+/**
+ * Make a name safe to use as a folder/file name inside the zip while preserving
+ * AbleSet's human-readable convention (keeps spaces, dashes, colons; strips only
+ * path separators and other illegal characters).
+ */
+function safeFolderName(name: string): string {
+  const cleaned = name.replace(/[/\\*?"<>|]/g, '').trim();
+  return cleaned.length > 0 ? cleaned : 'Untitled';
 }
 
 async function handlePostExportAls(
@@ -271,7 +294,7 @@ async function handlePostExportZip(
     return;
   }
 
-  const { song, stamps } = body as Record<string, unknown>;
+  const { song, stamps, lyricStamps, leadsheetName } = body as Record<string, unknown>;
 
   if (song === undefined || song === null) {
     json(res, 400, { error: 'Missing required field: song' });
@@ -285,6 +308,17 @@ async function handlePostExportZip(
 
   if (stamps.length > MAX_STAMPS) {
     json(res, 400, { error: `stamps array exceeds maximum length of ${MAX_STAMPS}` });
+    return;
+  }
+
+  // lyricStamps is optional: when present, the bundled .als also gets a
+  // populated lyrics ("chart") track alongside the leadsheet image track.
+  if (lyricStamps !== undefined && !Array.isArray(lyricStamps)) {
+    json(res, 400, { error: 'lyricStamps, if provided, must be an array' });
+    return;
+  }
+  if (Array.isArray(lyricStamps) && lyricStamps.length > MAX_STAMPS) {
+    json(res, 400, { error: `lyricStamps array exceeds maximum length of ${MAX_STAMPS}` });
     return;
   }
 
@@ -320,6 +354,13 @@ async function handlePostExportZip(
 
   const sheetStamps = stamps as SheetStamp[];
 
+  // AbleSet layout: <Song … Project>/Lyrics/<leadsheet-slug>/page-N.png, and
+  // clips reference images relative to the Lyrics folder, i.e. [img:<slug>/page-N.png].
+  const subfolder = slugify(
+    typeof leadsheetName === 'string' && leadsheetName.trim() ? leadsheetName : songObj.name,
+  );
+  const imageRefFor = (page: number) => `${subfolder}/page-${page}.png`;
+
   // Dedupe pages by page number — pick the first stamp encountered per page
   const pageMap = new Map<number, { filename: string; pngBuffer: Buffer }>();
   for (const stamp of sheetStamps) {
@@ -329,7 +370,7 @@ async function handlePostExportZip(
         json(res, 400, { error: `stamps entry for page ${stamp.page} has invalid pngDataUrl: must be a data:image/png;base64,... URL` });
         return;
       }
-      pageMap.set(stamp.page, { filename: `page${stamp.page}.png`, pngBuffer });
+      pageMap.set(stamp.page, { filename: `page-${stamp.page}.png`, pngBuffer });
     }
   }
   const pages = Array.from(pageMap.values());
@@ -338,32 +379,72 @@ async function handlePostExportZip(
   const manifest = sheetStamps.map((stamp) => ({
     ts: stamp.ts,
     page: stamp.page,
-    imageRef: stamp.imageRef,
+    imageRef: imageRefFor(stamp.page),
     region: stamp.region,
   }));
 
-  // Build .als clip inputs using [img:imageRef] naming
-  const stampInputs = sheetStamps.map((stamp) => ({
+  // Leadsheet track: one clip per page stamp. The trailing [full] makes the
+  // page fill the AbleSet screen (per-clip full-screen, per AbleSet docs:
+  // "[img:atw/atw-bass-1.png] [full]"). Belt-and-suspenders with the track's
+  // [full] attribute so the sheet never renders tiny/inline.
+  const leadsheetClips = sheetStamps.map((stamp) => ({
     ts: stamp.ts,
-    clipName: `[img:${stamp.imageRef}]`,
+    clipName: `[img:${imageRefFor(stamp.page)}] [full]`,
   }));
+
+  // Lyrics track (optional): one clip per lyric stamp, named with the line text.
+  // Accepts entries shaped { ts: number, text?: string } | { ts, clipName }.
+  const lyricClips: { ts: number; clipName: string }[] = Array.isArray(lyricStamps)
+    ? lyricStamps
+        .filter(
+          (s): s is Record<string, unknown> =>
+            typeof s === 'object' && s !== null && typeof (s as Record<string, unknown>).ts === 'number',
+        )
+        .map((s) => ({
+          ts: s.ts as number,
+          clipName:
+            typeof s.clipName === 'string'
+              ? s.clipName
+              : typeof s.text === 'string'
+                ? s.text
+                : '',
+        }))
+    : [];
+
+  const tracks: AlsTrackSpec[] = [
+    // [full] makes the page images fill the AbleSet screen (per AbleSet docs).
+    // "+LYRICS" is required for AbleSet to recognise it as a lyrics/image track.
+    { track: 'leadsheet', name: 'Leadsheet +LYRICS [full]', stamps: leadsheetClips },
+  ];
+  if (lyricClips.length > 0) {
+    // Populate the chart/lyrics track too so both stamp tracks are filled.
+    tracks.unshift({ track: 'chart', name: 'Vocals +LYRICS', stamps: lyricClips });
+  }
 
   let stampsAls: Buffer;
   try {
-    stampsAls = writeAlsFile({
-      bpm: songObj.bpm,
-      trackName: 'Vocals +LYRICS',
-      stamps: stampInputs,
-    });
+    stampsAls = writeAlsFile({ tracks });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     json(res, 400, { error: `Failed to generate Stamps.als: ${message}` });
     return;
   }
 
+  // Ableton project folder, e.g. "Great Things - E - 4:4 - 68 BPM Project".
+  // Time signature isn't captured by the app yet, so it defaults to 4:4.
+  const projectFolder = safeFolderName(`${songObj.name} - 4:4 - ${Math.round(songObj.bpm)} BPM Project`);
+  const alsFilename = `${safeFolderName(songObj.name)}.als`;
+
   let zipBuffer: Buffer;
   try {
-    zipBuffer = await packLeadsheetZip({ pages, manifest, stampsAls });
+    zipBuffer = await packLeadsheetZip({
+      projectFolder,
+      alsFilename,
+      imagesSubdir: `Lyrics/${subfolder}`,
+      pages,
+      manifest,
+      stampsAls,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     json(res, 500, { error: `Failed to build zip: ${message}` });

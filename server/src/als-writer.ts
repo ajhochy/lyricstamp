@@ -128,64 +128,114 @@ export type AlsStampInput = {
   clipName: string; // already-formatted name
 };
 
+// The two MIDI tracks present in blank-stamp-track.als (Live 12), in order.
+//   'chart'     → template EffectiveName "Chart +LYRICS [-2n]"   (lyric clips)
+//   'leadsheet' → template EffectiveName "leadsheet +LYRICS [-2n]" (page-image clips)
+export type AlsTemplateTrack = 'chart' | 'leadsheet';
+
+const TEMPLATE_TRACK_NAME: Record<AlsTemplateTrack, string> = {
+  chart: 'Chart +LYRICS [-2n]',
+  leadsheet: 'leadsheet +LYRICS [-2n]',
+};
+
+export type AlsTrackSpec = {
+  track: AlsTemplateTrack; // which template track to populate
+  name: string; // new EffectiveName for the track
+  stamps: AlsStampInput[]; // clips to inject (beats)
+};
+
 /**
  * Build a gzipped .als Buffer from the blank-stamp-track template.
  *
- * @param opts.bpm - Song tempo in BPM. Kept in the API for future use (e.g. writing
- *   a tempo track); no longer used for clip position since ts is already in beats.
- * @param opts.trackName - The EffectiveName for the MIDI track.
- * @param opts.stamps - List of stamps to insert as MidiClip elements.
- * @returns A Buffer containing the gzipped .als file contents.
+ * Two call styles:
+ *   - Legacy single track: { trackName, stamps } → populates the "chart" track.
+ *   - Multi-track:         { tracks: AlsTrackSpec[] } → populates each named
+ *     template track independently (e.g. lyrics on "chart" + images on
+ *     "leadsheet"). Each track's clips are injected into THAT track's own
+ *     ArrangerAutomation/Events, scoped per MidiTrack block.
+ *
+ * `bpm` is accepted for API stability but unused — ts is already in beats.
  */
 export function writeAlsFile(opts: {
-  bpm: number;
-  trackName: string;
-  stamps: AlsStampInput[];
+  bpm?: number;
+  trackName?: string;
+  stamps?: AlsStampInput[];
+  tracks?: AlsTrackSpec[];
 }): Buffer {
-  const { trackName, stamps } = opts;
+  const specs: AlsTrackSpec[] = opts.tracks
+    ? opts.tracks
+    : [{ track: 'chart', name: opts.trackName ?? 'Chart +LYRICS [-2n]', stamps: opts.stamps ?? [] }];
 
-  // 1. Read and decompress template
   const templateBytes = readFileSync(getTemplatePath());
   let xml = gunzipSync(templateBytes).toString('utf-8');
 
-  // 2. Rename the first MIDI track's EffectiveName.
-  //    The Live 12 template has "Chart +LYRICS [-2n]" and "leadsheet +LYRICS [-2n]".
-  //    We replace the first occurrence with the caller-chosen track name.
-  xml = xml.replace(
-    /<EffectiveName Value="Chart \+LYRICS \[-2n\]" \/>/,
-    `<EffectiveName Value="${escapeXml(trackName)}" />`,
+  // Split the document at the two MidiTrack boundaries so each track's clips
+  // land in its own block (the first <ArrangerAutomation>…<Events/> within the
+  // block is that track's arrangement clip container).
+  const starts = [...xml.matchAll(/<MidiTrack Id="\d+"/g)].map((m) => m.index ?? -1);
+  if (starts.length < 2) {
+    throw new Error(`Expected 2 MIDI tracks in template, found ${starts.length}`);
+  }
+  const prefix = xml.slice(0, starts[0]);
+  let chartSeg = xml.slice(starts[0], starts[1]); // track 0 = chart
+  let restSeg = xml.slice(starts[1]); // track 1 = leadsheet + document tail
+
+  // Number clip ids contiguously across tracks so no two clips share an Id.
+  let idBase = 0;
+  for (const spec of specs) {
+    if (spec.track === 'chart') {
+      chartSeg = applyTrack(chartSeg, spec, idBase);
+    } else {
+      restSeg = applyTrack(restSeg, spec, idBase);
+    }
+    idBase += spec.stamps.length;
+  }
+
+  xml = prefix + chartSeg + restSeg;
+  return gzipSync(Buffer.from(xml, 'utf-8'), { level: 9 });
+}
+
+/**
+ * Within a single MidiTrack segment, rename its EffectiveName and inject clips
+ * into its first (arrangement) Events element. Operates on the first match in
+ * the segment, which is safe because the segment contains exactly one track.
+ */
+function applyTrack(segment: string, spec: AlsTrackSpec, idBase: number): string {
+  let out = segment;
+
+  // Rename the template EffectiveName for this track (first match in segment).
+  const fromName = TEMPLATE_TRACK_NAME[spec.track];
+  out = out.replace(
+    new RegExp(`<EffectiveName Value="${escapeRegExp(fromName)}" />`),
+    `<EffectiveName Value="${escapeXml(spec.name)}" />`,
   );
 
-  // 3. Build MidiClip XML for each stamp and inject into ArrangerAutomation > Events.
-  if (stamps.length > 0) {
-    // ts is already in beats (AbletonOSC current_song_time unit = beats).
-    // No seconds→beats conversion needed.
-    const beatPositions = stamps.map((s) => s.ts);
-    const clipXml = stamps
+  if (spec.stamps.length > 0) {
+    const beats = spec.stamps.map((s) => s.ts);
+    const clipXml = spec.stamps
       .map((stamp, idx) => {
-        const start = beatPositions[idx];
-        const end = idx < stamps.length - 1
-          ? beatPositions[idx + 1]
-          : start + DEFAULT_CLIP_LENGTH;
-        return buildMidiClipXml(idx, start, end, stamp.clipName);
+        const start = beats[idx];
+        const end = idx < spec.stamps.length - 1 ? beats[idx + 1] : start + DEFAULT_CLIP_LENGTH;
+        return buildMidiClipXml(idBase + idx, start, end, stamp.clipName);
       })
       .join('\n\t\t\t\t\t');
-
-    // The template has: <ArrangerAutomation>\n\t\t\t\t\t<Events />
-    // Replace the self-closing Events element with one containing the clips.
-    xml = xml.replace(
+    out = out.replace(
       /(<ArrangerAutomation>[\s\S]*?<Events) \/>/,
       `$1>\n\t\t\t\t\t\t${clipXml}\n\t\t\t\t\t\t</Events>`,
     );
   }
 
-  // 4. Gzip and return
-  return gzipSync(Buffer.from(xml, 'utf-8'), { level: 9 });
+  return out;
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/** Escape a literal string for safe use inside a RegExp. */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /** Escape XML special characters in attribute values. */
 function escapeXml(str: string): string {
