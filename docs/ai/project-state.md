@@ -51,6 +51,34 @@ Server-side session storage implemented, verified (verification-gate PASS 2026-0
 
 ## Recent coding-agent runs
 
+### 2026-06-05 — live-stamp-write server group (Issues B+C+D, Model 2)
+- Files modified:
+  - `shared/types.ts` (EDIT) — added `HandlerStatus` type; added `handlerStatus: HandlerStatus` field to tick LiveMsg
+  - `server/src/osc-client.ts` (EDIT) — added `OscSendFn`/`OscReplyRegisterFn` transport seam types; added address constants for arrangement-write; added `_replyHandlers` map; added `_oscSend` (overrideable), `_registerReply`, `_request` helper; added `connected` getter; added `listTracks`, `writeStampClip`, `probeHandler` public methods; updated `_handleMessage` to dispatch reply handlers
+  - `server/src/routes.ts` (EDIT) — added `OscClient` injection via `setOscClient()`; added `handleGetLiveTracks` (GET /api/live/tracks, 503 if disconnected) and `handlePostLiveApply` (POST /api/live/apply, sequential writes, itemized failures); wired both into dispatcher
+  - `server/src/index.ts` (EDIT) — import + call `setOscClient(oscClient)` after construction
+  - `server/src/ws-server.ts` (EDIT) — track `handlerStatus: HandlerStatus`; probe on connect (reset to 'unknown' first, set 'present'/'absent' after probe resolves); include `handlerStatus` in every tick broadcast
+  - `server/src/osc-client.test.ts` (NEW) — 8 tests: listTracks (3), writeStampClip (3), probeHandler (2)
+  - `server/src/routes.test.ts` (NEW) — 14 tests: GET /api/live/tracks (4), POST /api/live/apply (8), handlerStatus shape (1) + types import smoke (1)
+- Checks run:
+  - `npx vitest run osc-client.test.ts routes.test.ts` — PASS (22 tests)
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (85 tests: 63 prior + 22 new)
+  - `npm run build` — PASS
+- Decisions made:
+  - Model 2 (proof-then-apply) implemented per 2026-06-05 revision; POST /api/live/apply is batch, not per-stamp. See docs/ai/current-plan.md revision block.
+  - OscClient testability via protected `_oscSend`/`_registerReply` override (subclass mock in tests) rather than constructor injection — avoids breaking the existing start() lifecycle contract.
+  - `setOscClient()` module-level setter in routes.ts (matches existing session-store pattern — no per-request DI needed since OSC client is a singleton).
+  - POST /api/live/apply returns 200 even with partial failures (failures itemized in `failed[]`), matching spec.
+  - GET /api/live/tracks returns 503 (not 200+empty) when disconnected — diverges slightly from the per-stamp design doc's "prefer empty array" but matches Model 2 spec which says "Disconnected → 503".
+- Deviations from spec:
+  - `probeHandler` returns `Promise<boolean>` (true/absent→false) rather than `Promise<'present'|'absent'|'disconnected'>` — simpler, and the caller (ws-server) only needs a boolean. The ws-server maps it to the full HandlerStatus enum.
+  - `_oscSend` uses a cast for the node-osc Client type since the library's TS types don't expose a uniform variadic send signature.
+- Concerns:
+  - `_dispatchMocked` in the test mock fires reply handlers synchronously during `_oscSend`. This works because `_request` registers the handler before calling `_oscSend`. If the send/register order ever changes the mocking would break — low risk, clearly documented in tests.
+  - The existing `_send`/`_sendWithValue` methods (used by poll/heartbeat) still call `this._oscClient` directly and are NOT routed through `_oscSend` — intentional (those predate the seam and are already tested indirectly by connection state).
+
 ### 2026-06-05 — server-side session storage (PR #25 follow-on)
 - Files modified:
   - `server/src/session-store.ts` (NEW) — filesystem-backed origin-independent session store

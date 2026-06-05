@@ -12,6 +12,17 @@ import {
   getSessionPdf,
   deleteSession,
 } from './session-store.js';
+import type { OscClient } from './osc-client.js';
+
+// ---------------------------------------------------------------------------
+// OscClient injection (set once on startup; used by live-write routes)
+// ---------------------------------------------------------------------------
+
+let _oscClient: OscClient | null = null;
+
+export function setOscClient(client: OscClient): void {
+  _oscClient = client;
+}
 
 // Resolved lazily at request time so that ELECTRON_STATIC_DIR set by
 // electron/main.ts (after app is ready) is visible. Fallback to out/renderer
@@ -472,6 +483,109 @@ async function handlePostExportZip(
 }
 
 // ---------------------------------------------------------------------------
+// Live-write routes (Issue C)
+// ---------------------------------------------------------------------------
+
+async function handleGetLiveTracks(
+  _req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  if (_oscClient === null || !_oscClient.connected) {
+    json(res, 503, { error: 'Ableton not connected' });
+    return;
+  }
+  try {
+    const tracks = await _oscClient.listTracks();
+    json(res, 200, tracks);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    json(res, 503, { error: `Failed to list tracks: ${message}` });
+  }
+}
+
+async function handlePostLiveApply(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  if (_oscClient === null || !_oscClient.connected) {
+    json(res, 503, { error: 'Ableton not connected' });
+    return;
+  }
+
+  let raw: string;
+  try {
+    raw = await readBody(req);
+  } catch {
+    json(res, 400, { error: 'Failed to read request body' });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    json(res, 400, { error: 'Body must be a JSON object' });
+    return;
+  }
+
+  const b = body as Record<string, unknown>;
+
+  if (typeof b.trackIndex !== 'number') {
+    json(res, 400, { error: 'Missing or invalid field: trackIndex (number)' });
+    return;
+  }
+
+  if (!Array.isArray(b.clips)) {
+    json(res, 400, { error: 'Missing or invalid field: clips (array)' });
+    return;
+  }
+
+  const rawClips = b.clips as unknown[];
+
+  for (let i = 0; i < rawClips.length; i++) {
+    const c = rawClips[i];
+    if (
+      typeof c !== 'object' ||
+      c === null ||
+      typeof (c as Record<string, unknown>).name !== 'string' ||
+      typeof (c as Record<string, unknown>).beat !== 'number'
+    ) {
+      json(res, 400, {
+        error: `clips[${i}] must have name (string) and beat (number)`,
+      });
+      return;
+    }
+  }
+
+  const clips = rawClips as { name: string; beat: number }[];
+  const trackIndex = b.trackIndex as number;
+
+  let written = 0;
+  const failed: { name: string; beat: number; error: string }[] = [];
+
+  // Write clips sequentially — they all reuse scratch slot 0; concurrent writes would collide.
+  for (const clip of clips) {
+    try {
+      await _oscClient.writeStampClip(trackIndex, clip.name, clip.beat);
+      written++;
+    } catch (err) {
+      failed.push({
+        name: clip.name,
+        beat: clip.beat,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  json(res, 200, { written, failed });
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -506,6 +620,18 @@ export async function handleRequest(
 
   if (method === 'POST' && path === '/api/export/zip') {
     await handlePostExportZip(req, res);
+    return;
+  }
+
+  // ---- Live-write routes ----
+
+  if (method === 'GET' && path === '/api/live/tracks') {
+    await handleGetLiveTracks(req, res);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/live/apply') {
+    await handlePostLiveApply(req, res);
     return;
   }
 
