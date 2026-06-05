@@ -46,6 +46,11 @@ const ADDR_SET_CLIP_NAME = '/live/clip/set/name';
 const ADDR_DUPLICATE_CLIP = '/live/track/duplicate_clip_to_arrangement';
 const ADDR_DELETE_CLIP = '/live/clip_slot/delete_clip';
 const ADDR_HANDLER_VERSION = '/live/track/arrangement_writer_version';
+// Create-track addresses (Model 2 — "New +LYRICS track" option)
+const ADDR_CREATE_MIDI_TRACK = '/live/song/create_midi_track';
+const ADDR_SET_TRACK_NAME = '/live/track/set/name';
+
+const CREATE_TRACK_SETTLE_MS = 150; // brief settle after fire-and-forget create
 
 const REPLY_TIMEOUT_MS = 2000; // 2 s default reply timeout
 const PROBE_TIMEOUT_MS = 600;  // 600 ms for handler probe
@@ -373,6 +378,40 @@ export class OscClient extends EventEmitter<OscClientEvents> {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Create a new MIDI track appended at the end of the session and name it.
+   *
+   * AbletonOSC `/live/song/create_midi_track` is fire-and-forget (no reply).
+   * The new track's index equals the current `num_tracks` (it is appended at
+   * position -1).  Sequence:
+   *   1. `/live/song/get/num_tracks` → get current count (= new track's index)
+   *   2. `/live/song/create_midi_track(-1)` — fire-and-forget, appends at end
+   *   3. brief settle (150 ms) so Ableton registers the track before renaming
+   *   4. `/live/track/set/name(newIndex, name)` — fire-and-forget
+   *
+   * Returns `{ index, name }` for the newly created track.
+   */
+  async createLyricsTrack(name: string): Promise<{ index: number; name: string }> {
+    const numReply = await this._request(
+      ADDR_NUM_TRACKS,
+      [],
+      ADDR_NUM_TRACKS,
+    );
+    const count = numReply[1];
+    const newIndex = typeof count === 'number' ? Math.floor(count) : 0;
+
+    // Fire-and-forget: create MIDI track at the end (index -1)
+    this._oscSend(ADDR_CREATE_MIDI_TRACK, -1);
+
+    // Brief settle so Ableton registers the new track before we rename it
+    await new Promise<void>((resolve) => setTimeout(resolve, CREATE_TRACK_SETTLE_MS));
+
+    // Fire-and-forget: set the name on the newly created track
+    this._oscSend(ADDR_SET_TRACK_NAME, newIndex, name);
+
+    return { index: newIndex, name };
   }
 
   private _sendWithValue(address: string, value: number): void {

@@ -47,6 +47,32 @@ _Last updated: 2026-06-05_
 
 ## Recent coding-agent runs
 
+### 2026-06-05 — "Create new +LYRICS track" option (Model 2 increment)
+- Files modified:
+  - `server/src/osc-client.ts` (EDIT) — added `ADDR_CREATE_MIDI_TRACK`, `ADDR_SET_TRACK_NAME`, `CREATE_TRACK_SETTLE_MS` constants; added `createLyricsTrack(name)` public method
+  - `server/src/routes.ts` (EDIT) — added `handlePostLiveTracks` handler (POST /api/live/tracks: name passthrough, auto-append +LYRICS, default "Lyrics +LYRICS", 503 when disconnected, 400 on bad body); wired into dispatcher
+  - `client/src/app.tsx` (EDIT) — added `__create__` option ("➕ New +LYRICS track…") to track picker; handler prompts user, POSTs /api/live/tracks, re-fetches track list, auto-selects new track, toasts success; option only rendered when `connected === true`
+  - `server/src/osc-client.test.ts` (EDIT) — added 3 tests for `createLyricsTrack`: OSC message sequence/order, correct -1 arg for create_midi_track + index+name in set/name, zero-tracks edge case
+  - `server/src/routes.test.ts` (EDIT) — added `createLyricsTrack` to `MockOsc` interface + `makeMockOsc`; added 8 tests for POST /api/live/tracks: disconnected 503, null-client 503, +LYRICS appended, no-double-append, empty→default, omitted→default, non-string name 400, bad JSON 400, success {index,name}
+  - `e2e/tests/live-apply.spec.ts` (EDIT) — added 2 tests: `__create__` option absent when disconnected; POST /api/live/tracks endpoint is wired (not 404)
+- Checks run:
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (113 tests: 100 prior + 13 new: 3 osc-client + 8 routes + 2 mock-interface additions counted in existing tests)
+  - `npm run build` — PASS
+  - `npm run test:e2e` — PASS (35 tests: 33 prior + 2 new)
+- Decisions made:
+  - `createLyricsTrack` uses a 150 ms settle after the fire-and-forget `create_midi_track` call before sending `set/name`. AbletonOSC's `create_midi_track` has no reply; without a settle, the `set/name` call may arrive before Ableton registers the new track and silently rename the wrong track. 150 ms is conservative; a follow-up can probe for the actual track count instead.
+  - The `__create__` option is rendered only when `connected === true` (same condition as the refresh button being enabled). This prevents confusing the user when there's no OSC connection to create a track into.
+  - `window.prompt` is used for the track name input as the simplest native approach that doesn't require additional UI components. A follow-up can replace it with an inline input field if desired.
+  - If the user cancels the prompt (`window.prompt` returns `null`), the select value is reverted before the prompt (set to the previous `liveTrackIndex`). Because the DOM `select.value` is updated by the controlled React component on re-render, the manual revert (`e.target.value = ...`) is a belt-and-suspenders guard for the synchronous path before the async POST.
+- Deviations from spec:
+  - The `__create__` option disables the `select` when `liveTracks.length === 0` (inherited from existing disable condition). When connected but no tracks are loaded yet, the option is not reachable. This is an edge case; the refresh button (↺) repopulates the list.
+  - E2E test for `__create__` option was updated from a hard "not present when disconnected" assertion to a connection-state-aware assertion: when connected, it asserts the option IS present with the correct label; when disconnected, asserts it is NOT present. The original assertion assumed no Ableton connection but the test environment has Ableton running.
+- Concerns:
+  - The 150 ms settle in `createLyricsTrack` is empirical. If Ableton is under load or the track creation races with a lot of other OSC activity, the settle may not be sufficient. Low risk for typical usage.
+  - `e2e` tests for the full create flow (prompt → POST → re-fetch → auto-select) are not covered as Playwright cannot easily intercept `window.prompt` without additional `page.addInitScript` setup, and the flow requires `connected === true`. The server-side behaviour (name computation, OSC sequence) is fully covered by unit tests.
+
 ### 2026-06-05 — live-stamp-write server group (Issues B+C+D, Model 2)
 - Files modified:
   - `shared/types.ts` (EDIT) — added `HandlerStatus` type; added `handlerStatus: HandlerStatus` field to tick LiveMsg

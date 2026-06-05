@@ -898,7 +898,47 @@ export function App() {
                 value={liveTrackIndex ?? ''}
                 onChange={(e) => {
                   const val = e.target.value;
-                  setLiveTrackIndex(val === '' ? null : Number(val));
+                  if (val === '__create__') {
+                    // Revert the select immediately (before the async prompt)
+                    e.target.value = liveTrackIndex !== null ? String(liveTrackIndex) : '';
+                    const defaultName = songName.trim() || 'Lyrics';
+                    const userInput = window.prompt('New track name:', defaultName);
+                    if (userInput === null) {
+                      // User cancelled — leave selection unchanged
+                      return;
+                    }
+                    fetch('/api/live/tracks', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ name: userInput }),
+                    })
+                      .then(async (r) => {
+                        if (!r.ok) {
+                          let errMsg = 'Unknown error';
+                          try {
+                            const body = await r.json() as { error?: string };
+                            errMsg = body.error ?? errMsg;
+                          } catch { /* ignore */ }
+                          pushToast(`Create track failed: ${errMsg}`);
+                          return;
+                        }
+                        const created = await r.json() as { index: number; name: string };
+                        // Re-fetch track list and auto-select the new track
+                        fetch('/api/live/tracks')
+                          .then((r2) => (r2.ok ? r2.json() as Promise<{ index: number; name: string }[]> : Promise.resolve([])))
+                          .then((tracks) => {
+                            setLiveTracks(tracks);
+                            setLiveTrackIndex(created.index);
+                          })
+                          .catch(() => {});
+                        pushToast(`Created "${created.name}"`);
+                      })
+                      .catch(() => {
+                        pushToast('Create track failed: backend unreachable');
+                      });
+                  } else {
+                    setLiveTrackIndex(val === '' ? null : Number(val));
+                  }
                 }}
                 disabled={!connected || liveTracks.length === 0}
                 title={connected ? (liveTracks.length === 0 ? 'No tracks available' : 'Select target track') : 'Ableton not connected'}
@@ -909,6 +949,9 @@ export function App() {
                     {t.name.includes('+LYRICS') ? `★ ${t.name}` : t.name}
                   </option>
                 ))}
+                {connected && (
+                  <option value="__create__">➕ New +LYRICS track…</option>
+                )}
               </select>
               <button
                 className="btn"

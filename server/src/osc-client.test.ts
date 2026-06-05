@@ -197,6 +197,62 @@ describe('OscClient.writeStampClip', () => {
 });
 
 // ---------------------------------------------------------------------------
+// createLyricsTrack
+// ---------------------------------------------------------------------------
+
+describe('OscClient.createLyricsTrack', () => {
+  it('sends num_tracks → create_midi_track → set/name and returns {index, name}', async () => {
+    const mock = makeMock();
+
+    // Queue num_tracks reply: 4 existing tracks → new track gets index 4
+    mock.queueReply('/live/song/get/num_tracks', ['/live/song/get/num_tracks', 4]);
+
+    const result = await mock.createLyricsTrack('My Song +LYRICS');
+
+    expect(result).toEqual({ index: 4, name: 'My Song +LYRICS' });
+
+    const addresses = mock.sent.map((s) => s.address);
+    // Must include num_tracks probe, then create_midi_track, then set/name
+    expect(addresses).toContain('/live/song/get/num_tracks');
+    expect(addresses).toContain('/live/song/create_midi_track');
+    expect(addresses).toContain('/live/track/set/name');
+
+    // Order: num_tracks first, then create, then set/name
+    const numIdx = addresses.indexOf('/live/song/get/num_tracks');
+    const createIdx = addresses.indexOf('/live/song/create_midi_track');
+    const setNameIdx = addresses.indexOf('/live/track/set/name');
+    expect(numIdx).toBeLessThan(createIdx);
+    expect(createIdx).toBeLessThan(setNameIdx);
+  });
+
+  it('sends create_midi_track with -1 (append at end) and set/name with correct index+name', async () => {
+    const mock = makeMock();
+    mock.queueReply('/live/song/get/num_tracks', ['/live/song/get/num_tracks', 2]);
+
+    await mock.createLyricsTrack('Vocals +LYRICS');
+
+    const createCall = mock.sent.find((s) => s.address === '/live/song/create_midi_track');
+    expect(createCall).toBeDefined();
+    expect(createCall!.args).toEqual([-1]);
+
+    const setNameCall = mock.sent.find((s) => s.address === '/live/track/set/name');
+    expect(setNameCall).toBeDefined();
+    expect(setNameCall!.args).toEqual([2, 'Vocals +LYRICS']);
+  });
+
+  it('handles zero existing tracks (new track gets index 0)', async () => {
+    const mock = makeMock();
+    mock.queueReply('/live/song/get/num_tracks', ['/live/song/get/num_tracks', 0]);
+
+    const result = await mock.createLyricsTrack('Lyrics +LYRICS');
+    expect(result).toEqual({ index: 0, name: 'Lyrics +LYRICS' });
+
+    const setNameCall = mock.sent.find((s) => s.address === '/live/track/set/name');
+    expect(setNameCall!.args).toEqual([0, 'Lyrics +LYRICS']);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // probeHandler
 // ---------------------------------------------------------------------------
 

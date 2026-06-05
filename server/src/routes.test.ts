@@ -21,9 +21,12 @@ interface MockOsc {
   listTracksResult: { index: number; name: string }[] | Error;
   writeStampClipCalls: { trackIndex: number; name: string; beat: number; length: number }[];
   writeStampClipError: Error | null;
+  createLyricsTrackCalls: string[];
+  createLyricsTrackResult: { index: number; name: string } | Error;
   listTracks(): Promise<{ index: number; name: string }[]>;
   writeStampClip(trackIndex: number, name: string, beat: number, length: number): Promise<void>;
   probeHandler(): Promise<boolean>;
+  createLyricsTrack(name: string): Promise<{ index: number; name: string }>;
 }
 
 function makeMockOsc(overrides?: Partial<MockOsc>): MockOsc {
@@ -32,6 +35,8 @@ function makeMockOsc(overrides?: Partial<MockOsc>): MockOsc {
     listTracksResult: [],
     writeStampClipCalls: [],
     writeStampClipError: null,
+    createLyricsTrackCalls: [],
+    createLyricsTrackResult: { index: 5, name: 'Lyrics +LYRICS' },
     listTracks() {
       if (this.listTracksResult instanceof Error) {
         return Promise.reject(this.listTracksResult);
@@ -47,6 +52,13 @@ function makeMockOsc(overrides?: Partial<MockOsc>): MockOsc {
     },
     probeHandler() {
       return Promise.resolve(true);
+    },
+    createLyricsTrack(name: string) {
+      this.createLyricsTrackCalls.push(name);
+      if (this.createLyricsTrackResult instanceof Error) {
+        return Promise.reject(this.createLyricsTrackResult);
+      }
+      return Promise.resolve(this.createLyricsTrackResult as { index: number; name: string });
     },
     ...overrides,
   };
@@ -205,6 +217,140 @@ const TEST_SONG = {
     { text: 'How precious did that grace appear' },
   ],
 };
+
+// ---------------------------------------------------------------------------
+// POST /api/live/tracks
+// ---------------------------------------------------------------------------
+
+describe('POST /api/live/tracks', () => {
+  beforeEach(() => {
+    setOscClient(null as unknown as import('./osc-client.js').OscClient);
+  });
+
+  afterEach(() => {
+    setOscClient(null as unknown as import('./osc-client.js').OscClient);
+  });
+
+  it('returns 503 when Ableton is disconnected', async () => {
+    const osc = makeMockOsc({ connected: false });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({ name: 'Test' }));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode } = await capture();
+    expect(statusCode).toBe(503);
+  });
+
+  it('returns 503 when oscClient is null', async () => {
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({ name: 'Test' }));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode } = await capture();
+    expect(statusCode).toBe(503);
+  });
+
+  it('appends +LYRICS to names that do not contain it', async () => {
+    const osc = makeMockOsc({
+      createLyricsTrackResult: { index: 3, name: 'My Song +LYRICS' },
+    });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({ name: 'My Song' }));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+
+    expect(statusCode).toBe(200);
+    // The route passes the computed final name to createLyricsTrack
+    expect(osc.createLyricsTrackCalls).toEqual(['My Song +LYRICS']);
+    const result = JSON.parse(body) as { index: number; name: string };
+    expect(result.index).toBe(3);
+    expect(result.name).toBe('My Song +LYRICS');
+  });
+
+  it('does not double-append +LYRICS when already present (case-insensitive)', async () => {
+    const osc = makeMockOsc({
+      createLyricsTrackResult: { index: 1, name: 'Vocals +LYRICS' },
+    });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({ name: 'Vocals +LYRICS' }));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    await capture();
+
+    // Should NOT append a second +LYRICS
+    expect(osc.createLyricsTrackCalls).toEqual(['Vocals +LYRICS']);
+  });
+
+  it('defaults to "Lyrics +LYRICS" when name is empty', async () => {
+    const osc = makeMockOsc({
+      createLyricsTrackResult: { index: 0, name: 'Lyrics +LYRICS' },
+    });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({ name: '' }));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    await capture();
+
+    expect(osc.createLyricsTrackCalls).toEqual(['Lyrics +LYRICS']);
+  });
+
+  it('defaults to "Lyrics +LYRICS" when name is omitted', async () => {
+    const osc = makeMockOsc({
+      createLyricsTrackResult: { index: 0, name: 'Lyrics +LYRICS' },
+    });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({}));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    await capture();
+
+    expect(osc.createLyricsTrackCalls).toEqual(['Lyrics +LYRICS']);
+  });
+
+  it('returns 400 when name is not a string', async () => {
+    const osc = makeMockOsc();
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({ name: 123 }));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(400);
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('name') });
+  });
+
+  it('returns 400 for invalid JSON body', async () => {
+    const osc = makeMockOsc();
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', 'not-json{{{');
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode } = await capture();
+    expect(statusCode).toBe(400);
+  });
+
+  it('returns {index, name} on success', async () => {
+    const osc = makeMockOsc({
+      createLyricsTrackResult: { index: 7, name: 'Great Things +LYRICS' },
+    });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq('POST', '/api/live/tracks', JSON.stringify({ name: 'Great Things' }));
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(200);
+    const result = JSON.parse(body) as { index: number; name: string };
+    expect(result.index).toBe(7);
+    expect(result.name).toBe('Great Things +LYRICS');
+  });
+});
 
 // stampsToClips unit tests — verify names match the export formatter
 describe('stampsToClips', () => {

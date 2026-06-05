@@ -532,6 +532,74 @@ async function handleGetLiveTracks(
   }
 }
 
+/**
+ * POST /api/live/tracks
+ * Body: { name?: string }
+ * Creates a new MIDI track in the live Ableton session and returns its index + name.
+ * The final name has ` +LYRICS` appended if not already present (case-insensitive).
+ * Empty or missing name defaults to "Lyrics +LYRICS".
+ */
+async function handlePostLiveTracks(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  if (_oscClient === null || !_oscClient.connected) {
+    json(res, 503, { error: 'Ableton not connected' });
+    return;
+  }
+
+  let raw: string;
+  try {
+    raw = await readBody(req);
+  } catch {
+    json(res, 400, { error: 'Failed to read request body' });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = raw.trim() === '' ? {} : JSON.parse(raw);
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    json(res, 400, { error: 'Body must be a JSON object' });
+    return;
+  }
+
+  const b = body as Record<string, unknown>;
+
+  if (b.name !== undefined && typeof b.name !== 'string') {
+    json(res, 400, { error: 'name must be a string' });
+    return;
+  }
+
+  // Compute the final track name: trim, append +LYRICS if absent, default to "Lyrics +LYRICS"
+  const rawName = (typeof b.name === 'string' ? b.name : '').trim();
+  let finalName: string;
+  if (rawName === '') {
+    finalName = 'Lyrics +LYRICS';
+  } else if (/\+lyrics/i.test(rawName)) {
+    finalName = rawName;
+  } else {
+    finalName = `${rawName} +LYRICS`;
+  }
+
+  try {
+    const track = await _oscClient.createLyricsTrack(finalName);
+    json(res, 200, track);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.toLowerCase().includes('not connected') || message.toLowerCase().includes('timeout')) {
+      json(res, 503, { error: `Failed to create track: ${message}` });
+    } else {
+      json(res, 500, { error: `Failed to create track: ${message}` });
+    }
+  }
+}
+
 async function handlePostLiveApply(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -669,6 +737,11 @@ export async function handleRequest(
 
   if (method === 'GET' && path === '/api/live/tracks') {
     await handleGetLiveTracks(req, res);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/live/tracks') {
+    await handlePostLiveTracks(req, res);
     return;
   }
 
