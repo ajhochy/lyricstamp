@@ -3,10 +3,10 @@
 _Last updated: 2026-06-05_
 
 ## Current focus
-Server-side session storage implemented, verified (verification-gate PASS 2026-06-05), and the user's real sessions migrated. All working-tree changes uncommitted — ready to commit and open draft PR.
+**live-stamp-write (proof-then-apply)** — implemented A–H and verified (verification-gate PASS 2026-06-05, commit `6609be4`). "Apply to Ableton" batch-writes proofed stamps into the live Arrangement via a bundled, patched AbletonOSC (`/live/track/duplicate_clip_to_arrangement` + `arrangement_writer_version` probe); `.als` export coexists. **Pending: manual Ableton smoke, then open PR → main.** PR #25 (Electron wrapper + server-side session storage) merged to main 2026-06-05.
 
 ## Active branch / PR
-- Branch: `issue-1-electron-wrapper`
+- Branch: `feat/live-stamp-write` (off merged main `054b717`); commits e7ad999 (plan) → cdba8d2 (server B–D) → 924e0d7 (client E–G) → 6609be4 (install A+H)
 - PR: not yet opened (manual merge required)
 
 ## Recently completed
@@ -23,7 +23,7 @@ Server-side session storage implemented, verified (verification-gate PASS 2026-0
 - **Real-data migration run** (2026-06-05): launched `electron:dev` once (origin `localhost:3000`) → `runSessionMigration()` imported **5 legacy sessions** (Great Things, Holy Spirit Living Breath of God - Leadsheet, 3× Christ Be Magnified - E), all with PDFs, into `~/Library/Application Support/ableset-lyrics-sync/sessions-data/`. Verified the **packaged `.app`** lists all 5 via `GET /api/sessions` and a PDF round-trips (317 KB, 3-page PDF). IndexedDB backed up to `~/Desktop/ableset-sessions-backup-*` (non-destructive).
 
 ## In progress
-- Nothing — verification-gate PASS recorded 2026-06-05; awaiting commit + PR open
+- live-stamp-write: code complete + verified on `feat/live-stamp-write`. Awaiting **manual Ableton smoke** (run `npm run install:remote-script`, restart Live, stamp, "Apply to Ableton", confirm clips land in the Arrangement + AbleSet reads them — see `docs/testing/manual-smoke.md`), then open PR → main.
 
 ## Risks
 - Live 12 `.als` patch may break Live 11 compatibility — needs cross-version manual smoke before shipping to Live 11 users
@@ -31,21 +31,17 @@ Server-side session storage implemented, verified (verification-gate PASS 2026-0
 - CI: `.github/workflows/ci.yml` + `release-electron.yml` exist; push to the branch triggers CI (watch with `gh run watch`). The `release-electron` signing/notarization pipeline is separate and untouched by this change.
 - Migration runs origin-side on app mount, guarded by `localStorage['ableset-sync.migrated-v1']` per origin. The user's `localhost:3000` data is now migrated; a packaged-origin (`127.0.0.1:7878`) launch has no legacy IndexedDB so it no-ops correctly. The working-session auto-restore PDF (`pdf-store.ts`, IndexedDB `kv`) is still origin-bound — tracked as a follow-up, out of scope here.
 
-## Test status (verified 2026-06-05)
-- Unit tests: **63 passing** (`npm test` — 4 files: als-writer, chordpro, zip-packer, session-store)
-- Playwright E2E (build target): **17 passing** (`npm run test:e2e`)
-- Playwright E2E (packaged `.app`, isolated data dir): **17 passing** (`npm run test:e2e:build`)
-- TypeScript: passing (`npm run typecheck`)
-- Lint: passing (`npm run lint`)
-- Web + server build: passing (`npm run build`)
-- Electron build: passing (`npm run electron:build`)
-- Health probe: `GET /api/health` → `{"ok":true}`
-- Sessions API smoke: `GET /api/sessions` → `[]`; `PUT` → meta; `DELETE` → `{"ok":true}`
+## Test status (verified 2026-06-05, `feat/live-stamp-write` @ `6609be4`)
+- Unit tests: **100 passing** (`npm test` — 7 files; added osc-client, routes, install-remote-script)
+- Playwright E2E (build target): **33 passing** (`npm run test:e2e`; +16 `live-apply.spec.ts`)
+- TypeScript / Lint / build: passing (`npm run typecheck`, `npm run lint`, `npm run build`)
+- UI screenshot verified: track picker + "Apply to Ableton" + handler-absent banner render (`/tmp/live-apply-ui.png`)
+- **Manual-smoke only (Ableton required):** live `POST /api/live/apply` writing clips into the Arrangement; AbleSet reading live-placed clips
 
 ## Next step
-1. Commit all working-tree changes (see git status for file list)
-2. Open/update draft PR `issue-1-electron-wrapper` → `main`
-3. Manual smoke of packaged `.app` / DMG with Live 12 to confirm #26 fix end-to-end (and eyeball the 5 migrated sessions in the Sessions menu)
+1. **Manual Ableton smoke** of live-stamp-write (`docs/testing/manual-smoke.md`): install remote script, restart Live, pick a `+LYRICS` track, stamp, "Apply to Ableton", verify clips in the Arrangement + AbleSet reads them.
+2. Open PR `feat/live-stamp-write` → main; push triggers CI (`gh run watch`).
+3. (Carried over) cross-version Live 11/12 `.als` manual check before shipping to Live 11 users.
 
 ---
 
