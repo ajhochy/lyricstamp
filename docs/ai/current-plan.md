@@ -4,6 +4,38 @@ _Updated: 2026-06-05_
 
 ---
 
+## ⚠️ REVISION 2026-06-05 — Model 2: proof-then-apply (SUPERSEDES per-stamp live write)
+
+User decision: the feature is **NOT** real-time per-stamp. It is **proof-then-apply**:
+stamp + edit/proof in the app exactly as today (accumulate `stamps[]`, stamp log, inline
+edit, undo — all unchanged), then press **"Apply to Ableton"** to batch-write every
+proofed clip into the Arrangement at its computed beat in one pass.
+
+**Why:** deleting an *arrangement* clip is not exposed over AbletonOSC, so a wrong live
+per-stamp write is stuck in Ableton; proofing in-app stays reversible, and a batch write
+reuses the existing accumulate→commit flow (same beats the `.als` export already computes).
+
+**What changes vs. the per-stamp sections below:**
+- **DROP** the "Live Stamp ⇄ Export" mode toggle and the per-keystroke wiring (old issue F).
+  `stamp()` is **unchanged** from today (append + cursor advance only).
+- **Server API (issue C)** becomes a **batch** endpoint:
+  `POST /api/live/apply` with `{ trackIndex, clips: [{ name, beat }, ...] }` →
+  writes each clip (scratch slot 0: create → name → duplicate_clip_to_arrangement(beat) →
+  delete), returns `{ written, failed[] }`. (Plus `GET /api/live/tracks` for the picker.)
+- **OSC client (issue B)**: `listTracks`, `probeHandler`, and `writeStampClip(trackIndex, name, beat)`
+  (the per-clip primitive the batch loops over).
+- **Client (issues E/F merged)**: a track-picker + an **"Apply to Ableton" button** next to
+  "Export .zip" (both destinations coexist). On click: gather proofed `stamps[]` → formatted
+  name + beat → `POST /api/live/apply` → result toast ("Wrote N clips" / per-clip failures).
+  Button disabled (with reason) when Ableton disconnected, handler absent, or no track picked.
+- **Banner (issue G)** and **vendor fork + install (issue A)**, **WS handlerStatus (issue D)**,
+  **docs (issue H)** are unchanged in intent.
+
+Everything below this block is the original per-stamp design, retained for context but
+overridden by this revision where they conflict.
+
+---
+
 ## Feature: live-stamp-write
 
 ### Problem
