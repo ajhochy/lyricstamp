@@ -6,6 +6,12 @@ const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const BACKEND_URL = 'http://127.0.0.1:7878';
 
 app.whenReady().then(async () => {
+  // Share the Electron userData path with the server so sessions resolve to
+  // ~/Library/Application Support/ableset-lyrics-sync regardless of origin.
+  // Set unconditionally (dev and packaged) so dev-mode sessions land in the
+  // same store as the packaged app.
+  process.env.ELECTRON_USER_DATA = app.getPath('userData');
+
   // Tell the server where the built renderer lives.
   // In the packaged app, app.getAppPath() returns the .asar path — Electron's
   // patched fs can read inside it, so this resolves correctly at request time.

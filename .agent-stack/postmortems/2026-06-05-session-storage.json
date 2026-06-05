@@ -1,0 +1,69 @@
+{
+  "run_id": "2026-06-05-session-storage",
+  "issue": 25,
+  "date": "2026-06-05",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": true,
+  "summary": "Server-side session storage (durable fix for origin-partitioned IndexedDB sessions), stacked on PR #25. Implementation + migration verified; manual smoke (real-data migration via electron:dev) passed. A divergence occurred EARLIER in the session, before this fix existed: the orchestrator claimed the user's sessions 'carried over into this fresh build' without evidence — they had not, because IndexedDB is partitioned per renderer origin (dev localhost:3000 vs packaged 127.0.0.1:7878). The user caught it ('all my sessions gone?'). That false-reassurance is the high-signal datapoint this postmortem records.",
+  "criteria_results": [
+    {
+      "criterion_id": "sess-c1",
+      "text": "GET /api/sessions returns [] on empty dir; PUT then list returns matching meta",
+      "contract_status": "present",
+      "smoke_status": "pass",
+      "category": "C1",
+      "notes": "Covered by server/src/session-store.test.ts (8 tests) — red before impl, green after."
+    },
+    {
+      "criterion_id": "sess-c2",
+      "text": "PDF round-trips through the store with bytes/name/type preserved",
+      "contract_status": "present",
+      "smoke_status": "pass",
+      "category": "C1",
+      "notes": "Unit test + live verification: migrated PDF fetched via /api/sessions/:id/pdf = 317128 bytes, valid 3-page PDF v1.4."
+    },
+    {
+      "criterion_id": "sess-c3",
+      "text": "UI-saved session visible via GET /api/sessions and survives page reload",
+      "contract_status": "present",
+      "smoke_status": "pass",
+      "category": "C1",
+      "notes": "e2e/tests/session-persistence.spec.ts — passes on build target AND packaged .app."
+    },
+    {
+      "criterion_id": "sess-c4",
+      "text": "Existing localhost:3000 sessions migrated and visible in the packaged app",
+      "contract_status": "present",
+      "smoke_status": "pass",
+      "category": "C1",
+      "notes": "electron:dev launch triggered runSessionMigration(); 5 sessions (all with PDFs) imported to shared sessions-data; packaged .app GET /api/sessions lists all 5. IndexedDB backed up to ~/Desktop first (non-destructive)."
+    }
+  ],
+  "workflow_adherence": {
+    "orchestrator_entry": "yes — workflow-orchestrator invoked as first Skill call on the #3 request (and re-entered on resume).",
+    "chain_steps_run": [
+      "planning-agent (in-process, current-plan.md authored)",
+      "acceptance-contract (in-process: server unit + e2e contracts written red-first)",
+      "coding-agent (sonnet subagent)",
+      "verification-gate (in-process, same-response evidence: typecheck/lint/63 unit/build/17 e2e build/17 e2e packaged)",
+      "project-state-updater (in-process)",
+      "failure-postmortem (this artifact)"
+    ],
+    "guards": {
+      "W2_orchestrator_required": "honored",
+      "W4_source_of_truth": "n/a — no SKILL.md/workflow edits in this run",
+      "W5_same_response_evidence": "honored at verification-gate; VIOLATED earlier in session (the 'carried over' reassurance had no evidence and was wrong)",
+      "W6_branch_confirm": "honored — git remote/branch checked before push-class ops"
+    },
+    "divergence_category": "C1/C2 — premature confidence claim without verification; root cause was an unstated assumption (same userData folder ⇒ same data) that ignored per-origin partitioning.",
+    "lesson": "Persistence/identity claims ('your data carried over') are verifiable facts, not reassurances. Before asserting data is present in environment B, query B's actual store. The coding-agent subagent also returned a project-state-style summary instead of the requested validation report — the orchestrator must independently re-run verification, never trust a subagent's 'green' claim."
+  },
+  "followups": [
+    {
+      "title": "Move working-session auto-restore PDF (pdf-store.ts) server-side too",
+      "reason": "Still origin-bound IndexedDB; out of scope for the named-session fix.",
+      "filed": false
+    }
+  ]
+}

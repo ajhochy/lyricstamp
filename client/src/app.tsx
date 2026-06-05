@@ -22,6 +22,7 @@ import {
   type SessionMeta,
   type SessionState,
 } from './session-store';
+import { runSessionMigration } from './migrate-sessions';
 import { useLive } from './use-live';
 import type { Song } from '../../shared/types';
 
@@ -176,6 +177,13 @@ export function App() {
   useEffect(() => {
     refreshSessions();
   }, [refreshSessions]);
+
+  // Run the one-time IndexedDB → server migration on mount, then refresh the
+  // session list so any migrated sessions are immediately visible.
+  useEffect(() => {
+    runSessionMigration().finally(() => refreshSessions());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSaveSession = useCallback(
     async (forceNew: boolean) => {

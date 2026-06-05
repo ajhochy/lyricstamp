@@ -5,6 +5,13 @@ import { parseChordPro } from './chordpro.js';
 import { writeAlsFile, type AlsTrackSpec } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
 import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
+import {
+  listSessions,
+  saveSession,
+  getSession,
+  getSessionPdf,
+  deleteSession,
+} from './session-store.js';
 
 // Resolved lazily at request time so that ELECTRON_STATIC_DIR set by
 // electron/main.ts (after app is ready) is visible. Fallback to out/renderer
@@ -499,6 +506,89 @@ export async function handleRequest(
 
   if (method === 'POST' && path === '/api/export/zip') {
     await handlePostExportZip(req, res);
+    return;
+  }
+
+  // ---- Session routes ----
+
+  if (method === 'GET' && path === '/api/sessions') {
+    json(res, 200, await listSessions());
+    return;
+  }
+
+  const sessionMatch = path.match(/^\/api\/sessions\/([^/]+)$/);
+  const sessionPdfMatch = path.match(/^\/api\/sessions\/([^/]+)\/pdf$/);
+
+  if (method === 'GET' && sessionPdfMatch) {
+    const id = decodeURIComponent(sessionPdfMatch[1]);
+    const pdf = await getSessionPdf(id);
+    if (!pdf) {
+      json(res, 404, { error: 'Not found' });
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': pdf.type,
+      'Content-Length': pdf.bytes.byteLength,
+    });
+    res.end(pdf.bytes);
+    return;
+  }
+
+  if (method === 'GET' && sessionMatch) {
+    const id = decodeURIComponent(sessionMatch[1]);
+    const full = await getSession(id);
+    if (!full) {
+      json(res, 404, { error: 'Not found' });
+      return;
+    }
+    json(res, 200, { meta: full.meta, state: full.state, hasPdf: full.meta.hasPdf });
+    return;
+  }
+
+  if (method === 'PUT' && sessionMatch) {
+    const id = decodeURIComponent(sessionMatch[1]);
+    let raw: string;
+    try {
+      raw = await readBody(req);
+    } catch {
+      json(res, 400, { error: 'Failed to read request body' });
+      return;
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(raw);
+    } catch {
+      json(res, 400, { error: 'Invalid JSON' });
+      return;
+    }
+    if (typeof body !== 'object' || body === null) {
+      json(res, 400, { error: 'Body must be a JSON object' });
+      return;
+    }
+    const b = body as Record<string, unknown>;
+    const name = typeof b.name === 'string' ? b.name : '';
+    const savedAt = typeof b.savedAt === 'number' ? b.savedAt : 0;
+    const state = (typeof b.state === 'object' && b.state !== null
+      ? b.state
+      : {}) as Record<string, unknown>;
+
+    let pdf: { bytes: Buffer; name: string; type: string } | null = null;
+    if (typeof b.pdf === 'string' && b.pdf.length > 0) {
+      const pdfBytes = Buffer.from(b.pdf, 'base64');
+      const pdfName = typeof b.pdfName === 'string' ? b.pdfName : `${id}.pdf`;
+      const pdfType = typeof b.pdfType === 'string' ? b.pdfType : 'application/pdf';
+      pdf = { bytes: pdfBytes, name: pdfName, type: pdfType };
+    }
+
+    const meta = await saveSession({ id, name, savedAt, state, pdf });
+    json(res, 200, meta);
+    return;
+  }
+
+  if (method === 'DELETE' && sessionMatch) {
+    const id = decodeURIComponent(sessionMatch[1]);
+    await deleteSession(id);
+    json(res, 200, { ok: true });
     return;
   }
 

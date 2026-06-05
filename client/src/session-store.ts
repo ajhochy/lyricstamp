@@ -1,9 +1,12 @@
-// session-store.ts — named, switchable work sessions (one per song/leadsheet).
+// session-store.ts — named, switchable work sessions (server-backed).
 //
-// Each session captures the full working state plus its own PDF. Listing is
-// cheap because PDF bytes live in a separate store, read only when loading.
+// All session data is stored on the server (filesystem) so sessions are
+// origin-independent: identical in dev (localhost:3000) and in the packaged
+// Electron app (127.0.0.1:7878). The server API is at /api/sessions.
+//
+// Exports are intentionally identical to the old IndexedDB implementation so
+// app.tsx is unchanged.
 
-import { openDb, SESSIONS_STORE, SESSION_PDFS_STORE } from './idb';
 import type { Song } from '../../shared/types';
 import type { InitialStamp } from './data';
 import type { LeadsheetStamp } from './views';
@@ -19,21 +22,10 @@ export type SessionState = {
   leadsheetStamps: LeadsheetStamp[];
 };
 
-/** Light record stored in `sessions` (no PDF bytes). */
-type SessionRecord = {
-  id: string;
-  name: string;
-  savedAt: number;
-  hasPdf: boolean;
-  state: SessionState;
-};
-
-type StoredPdf = { name: string; type: string; bytes: ArrayBuffer };
-
 export type SessionMeta = { id: string; name: string; savedAt: number; hasPdf: boolean };
 export type FullSession = { meta: SessionMeta; state: SessionState; pdf: File | null };
 
-function newId(): string {
+export function newId(): string {
   try {
     return crypto.randomUUID();
   } catch {
@@ -41,23 +33,11 @@ function newId(): string {
   }
 }
 
-/** List saved sessions (newest first). Reads only the light records. */
+/** List saved sessions (newest first). */
 export async function listSessions(): Promise<SessionMeta[]> {
-  if (typeof indexedDB === 'undefined') return [];
-  const db = await openDb();
-  try {
-    const records = await new Promise<SessionRecord[]>((resolve, reject) => {
-      const t = db.transaction(SESSIONS_STORE, 'readonly');
-      const req = t.objectStore(SESSIONS_STORE).getAll();
-      req.onsuccess = () => resolve((req.result as SessionRecord[]) ?? []);
-      req.onerror = () => reject(req.error);
-    });
-    return records
-      .map((r) => ({ id: r.id, name: r.name, savedAt: r.savedAt, hasPdf: r.hasPdf }))
-      .sort((a, b) => b.savedAt - a.savedAt);
-  } finally {
-    db.close();
-  }
+  const res = await fetch('/api/sessions');
+  if (!res.ok) return [];
+  return (await res.json()) as SessionMeta[];
 }
 
 /**
@@ -72,82 +52,82 @@ export async function saveSession(
   savedAt: number = 0,
 ): Promise<string> {
   const sessionId = id ?? newId();
-  const pdfBytes = pdf ? await pdf.arrayBuffer() : null;
-  const record: SessionRecord = {
-    id: sessionId,
-    name: name.trim() || 'Untitled session',
-    savedAt: savedAt || 0,
-    hasPdf: pdf !== null,
-    state,
-  };
-  const db = await openDb();
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const t = db.transaction([SESSIONS_STORE, SESSION_PDFS_STORE], 'readwrite');
-      t.objectStore(SESSIONS_STORE).put(record, sessionId);
-      const pdfStore = t.objectStore(SESSION_PDFS_STORE);
-      if (pdf && pdfBytes) {
-        const stored: StoredPdf = { name: pdf.name, type: pdf.type || 'application/pdf', bytes: pdfBytes };
-        pdfStore.put(stored, sessionId);
-      } else {
-        pdfStore.delete(sessionId);
-      }
-      t.oncomplete = () => resolve();
-      t.onerror = () => reject(t.error);
-    });
-  } finally {
-    db.close();
+
+  let pdfBase64: string | undefined;
+  let pdfName: string | undefined;
+  let pdfType: string | undefined;
+
+  if (pdf) {
+    const buf = await pdf.arrayBuffer();
+    // Convert ArrayBuffer → base64 without using btoa directly on binary string
+    // (btoa can throw on large buffers in some environments).
+    pdfBase64 = bufferToBase64(buf);
+    pdfName = pdf.name;
+    pdfType = pdf.type || 'application/pdf';
   }
+
+  const body = {
+    name: name.trim() || 'Untitled session',
+    savedAt: savedAt || Date.now(),
+    state,
+    ...(pdfBase64 !== undefined ? { pdf: pdfBase64, pdfName, pdfType } : {}),
+  };
+
+  const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    throw new Error(`saveSession failed: ${res.status}`);
+  }
+
   return sessionId;
 }
 
 /** Load a full session (state + reconstructed PDF File). */
 export async function getSession(id: string): Promise<FullSession | null> {
-  if (typeof indexedDB === 'undefined') return null;
-  const db = await openDb();
-  try {
-    const record = await new Promise<SessionRecord | undefined>((resolve, reject) => {
-      const t = db.transaction(SESSIONS_STORE, 'readonly');
-      const req = t.objectStore(SESSIONS_STORE).get(id);
-      req.onsuccess = () => resolve(req.result as SessionRecord | undefined);
-      req.onerror = () => reject(req.error);
-    });
-    if (!record) return null;
+  const res = await fetch(`/api/sessions/${encodeURIComponent(id)}`);
+  if (!res.ok) return null;
 
-    let pdf: File | null = null;
-    if (record.hasPdf) {
-      const stored = await new Promise<StoredPdf | undefined>((resolve, reject) => {
-        const t = db.transaction(SESSION_PDFS_STORE, 'readonly');
-        const req = t.objectStore(SESSION_PDFS_STORE).get(id);
-        req.onsuccess = () => resolve(req.result as StoredPdf | undefined);
-        req.onerror = () => reject(req.error);
-      });
-      if (stored) pdf = new File([stored.bytes], stored.name, { type: stored.type });
+  const full = (await res.json()) as { meta: SessionMeta; state: SessionState; hasPdf: boolean };
+
+  let pdf: File | null = null;
+  if (full.hasPdf) {
+    try {
+      const pdfRes = await fetch(`/api/sessions/${encodeURIComponent(id)}/pdf`);
+      if (pdfRes.ok) {
+        const bytes = await pdfRes.arrayBuffer();
+        const contentDisposition = pdfRes.headers.get('Content-Disposition') ?? '';
+        const nameMatch = contentDisposition.match(/filename="?([^";]+)"?/);
+        const pdfName = nameMatch?.[1] ?? `${id}.pdf`;
+        const pdfType = pdfRes.headers.get('Content-Type') ?? 'application/pdf';
+        pdf = new File([bytes], pdfName, { type: pdfType });
+      }
+    } catch {
+      // PDF fetch failed — return session without PDF.
     }
-
-    return {
-      meta: { id: record.id, name: record.name, savedAt: record.savedAt, hasPdf: record.hasPdf },
-      state: record.state,
-      pdf,
-    };
-  } finally {
-    db.close();
   }
+
+  return { meta: full.meta, state: full.state, pdf };
 }
 
 /** Delete a session and its PDF. */
 export async function deleteSession(id: string): Promise<void> {
-  if (typeof indexedDB === 'undefined') return;
-  const db = await openDb();
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const t = db.transaction([SESSIONS_STORE, SESSION_PDFS_STORE], 'readwrite');
-      t.objectStore(SESSIONS_STORE).delete(id);
-      t.objectStore(SESSION_PDFS_STORE).delete(id);
-      t.oncomplete = () => resolve();
-      t.onerror = () => reject(t.error);
-    });
-  } finally {
-    db.close();
+  await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/** Convert an ArrayBuffer to a base64 string without btoa size limits. */
+function bufferToBase64(buf: ArrayBuffer): string {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
+  return btoa(binary);
 }

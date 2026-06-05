@@ -4,18 +4,23 @@
 ```
 ableset-lyrics-sync/
 ├── client/               # Vite + React frontend
-│   ├── src/              # React components, hooks, styles
+│   ├── src/
+│   │   ├── session-store.ts         # API-backed named sessions (fetch → /api/sessions)
+│   │   ├── legacy-idb-sessions.ts   # Read-only IndexedDB reader (migration source)
+│   │   ├── migrate-sessions.ts      # One-time IDB → server migration (localStorage guard)
+│   │   └── ...                      # React components, hooks, styles
 │   ├── public/           # Static assets (pdf.worker.min.js)
 │   └── vite.config.ts    # Vite config (port 3000, proxies /api + /live)
 ├── server/
 │   └── src/
-│       ├── index.ts      # Entry point — starts HTTP + OSC
-│       ├── routes.ts     # HTTP API handlers
-│       ├── ws-server.ts  # WebSocket broadcast server (/live)
-│       ├── osc-client.ts # AbletonOSC bridge (port 11000/11001)
-│       ├── als-writer.ts # Exports .als project files
-│       ├── chordpro.ts   # ChordPro parser
-│       └── zip-packer.ts # Leadsheet .zip export
+│       ├── index.ts          # Entry point — starts HTTP + OSC
+│       ├── routes.ts         # HTTP API handlers (incl. /api/sessions routes)
+│       ├── session-store.ts  # Filesystem-backed session store (origin-independent)
+│       ├── ws-server.ts      # WebSocket broadcast server (/live)
+│       ├── osc-client.ts     # AbletonOSC bridge (port 11000/11001)
+│       ├── als-writer.ts     # Exports .als project files
+│       ├── chordpro.ts       # ChordPro parser
+│       └── zip-packer.ts     # Leadsheet .zip export
 ├── shared/               # Shared TypeScript types (client + server)
 ├── scripts/
 │   └── generate-template.ts  # One-time: builds templates/blank-stamp-track.als
