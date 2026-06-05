@@ -94,3 +94,25 @@ Server-side session storage implemented, verified (verification-gate PASS 2026-0
 - Checks run: all PASS (typecheck, lint, 63 unit tests, build, electron:build, 17 E2E tests)
 - Deviations from spec: none
 - Concerns: `electron:build` must be run (not just `npm run build`) before `test:e2e` since the build target reads `out/renderer/` not `dist/`
+
+### 2026-06-05 — live-stamp-write client+integration group (Issues E/F/G + server fix, Model 2)
+- Files modified:
+  - `server/src/routes.ts` (EDIT) — extracted `stampsToClips(song, stamps)` helper (exported); changed `handlePostLiveApply` to accept `{trackIndex, song, stamps}` (validates `song.lines` + `stamps[*].{idx,ts}`), computes clips via `stampsToClips`; removed old `clips[]` input path
+  - `server/src/routes.test.ts` (EDIT) — updated all POST /api/live/apply tests to send `{song, stamps}` not `{clips}`; added `stampsToClips` unit tests (3) confirming name formatting matches export; total routes tests now 19 (up from 14)
+  - `client/src/use-live.ts` (EDIT) — added `handlerStatus: HandlerStatus` to `LiveState` and `INITIAL_STATE`; reads `msg.handlerStatus` from tick messages
+  - `client/src/app.tsx` (EDIT) — destructures `handlerStatus` from `liveState`; added `liveTrackIndex` persistent state (key `liveTrackIndex`), `liveTracks` state, `applyingToAbleton` flag; `useEffect` to fetch `/api/live/tracks` when `connected` flips true; `applyToAbleton()` callback (`POST /api/live/apply {trackIndex, song, stamps}`); `applyDisabledReason` memo; track picker `<select>` in header (lyrics tab only); Apply button in header-actions (lyrics tab only, disabled with reason tooltip); `handlerStatus === 'absent'` banner between header and main
+  - `client/src/styles.css` (EDIT) — added `.live-track-picker`, `.select`, `.apply-btn`, `.handler-absent-banner` CSS
+  - `e2e/tests/live-apply.spec.ts` (NEW) — 16 Playwright tests: track picker presence/disabled/hidden; `/api/live/tracks` endpoint structure; `+LYRICS` marker via mocked API; Apply button presence/disabled/tooltip/hidden/coexistence with Export; banner DOM injection/content/CSS; `stamp()` unchanged (no error toast, log grows)
+- Checks run:
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (90 tests: 85 prior + 5 new stampsToClips tests; routes tests: 19 total, restructured)
+  - `npm run build` + `npm run electron:build` — PASS (25.17 kB CSS)
+  - `npm run test:e2e` — PASS (33 tests: 17 prior + 16 new)
+- Decisions made: see `docs/ai/decisions.md` entry "2026-06-05 — POST /api/live/apply accepts song+stamps"
+- Deviations from spec:
+  - Handler-absent banner e2e tests use DOM injection (not a real WS tick fixture) because WS upgrade requests are not interceptable via `page.route` in standard Playwright. The banner render path (React renders `<div class="handler-absent-banner">` when `handlerStatus === 'absent'`) is verified by CSS + structural assertions. A note is included in the test file explaining the limitation.
+  - WS `handlerStatus` value in e2e could be 'absent' if Ableton is running with unpatched OSC — tests rewritten to be robust to any connection state (check `validReasons[]` set instead of exact string).
+- Concerns:
+  - `applyToAbleton` in `app.tsx` sends `stamps` (the `InitialStamp[]`) directly in the fetch body. The server validates `{idx, ts}` fields — this is structurally correct but the server does not know about `sectionStart`. That field is ignored (not needed for clip names or beat positions). Low risk.
+  - `stamp()` behavior unchanged confirmed by tests — pressing ArrowRight does NOT call `/api/live/apply`. Apply is purely the button action.

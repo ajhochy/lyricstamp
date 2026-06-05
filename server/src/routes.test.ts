@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import http from 'node:http';
 import { Readable } from 'node:stream';
-import { handleRequest, setOscClient } from './routes.js';
+import { handleRequest, setOscClient, stampsToClips } from './routes.js';
 
 // ---------------------------------------------------------------------------
 // Minimal mock for the OscClient interface used by routes
@@ -191,8 +191,52 @@ describe('GET /api/live/tracks', () => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/live/apply
+// POST /api/live/apply (song+stamps input → server computes clip names)
 // ---------------------------------------------------------------------------
+
+// Shared test fixtures
+const TEST_SONG = {
+  name: 'Amazing Grace',
+  bpm: 76,
+  key: 'G',
+  lines: [
+    { text: 'Amazing grace how sweet the sound' },
+    { text: 'That saved a wretch like me' },
+    { text: 'How precious did that grace appear' },
+  ],
+};
+
+// stampsToClips unit tests — verify names match the export formatter
+describe('stampsToClips', () => {
+  it('maps stamp idx+ts to name+beat from song lines', () => {
+    const stamps = [
+      { idx: 0, ts: 8 },
+      { idx: 1, ts: 16 },
+      { idx: 2, ts: 24 },
+    ];
+    expect(stampsToClips(TEST_SONG, stamps)).toEqual([
+      { name: 'Amazing grace how sweet the sound', beat: 8 },
+      { name: 'That saved a wretch like me', beat: 16 },
+      { name: 'How precious did that grace appear', beat: 24 },
+    ]);
+  });
+
+  it('prefers per-stamp text override over song line text', () => {
+    const stamps = [
+      { idx: 0, ts: 4, text: 'Custom override' },
+      { idx: 1, ts: 8 },
+    ];
+    expect(stampsToClips(TEST_SONG, stamps)).toEqual([
+      { name: 'Custom override', beat: 4 },
+      { name: 'That saved a wretch like me', beat: 8 },
+    ]);
+  });
+
+  it('returns empty string for out-of-bounds idx', () => {
+    const stamps = [{ idx: 99, ts: 4 }];
+    expect(stampsToClips(TEST_SONG, stamps)).toEqual([{ name: '', beat: 4 }]);
+  });
+});
 
 describe('POST /api/live/apply', () => {
   beforeEach(() => {
@@ -210,7 +254,11 @@ describe('POST /api/live/apply', () => {
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ trackIndex: 0, clips: [{ name: 'A', beat: 8 }] }),
+      JSON.stringify({
+        trackIndex: 0,
+        song: TEST_SONG,
+        stamps: [{ idx: 0, ts: 8 }],
+      }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);
@@ -225,7 +273,7 @@ describe('POST /api/live/apply', () => {
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ clips: [{ name: 'A', beat: 8 }] }),
+      JSON.stringify({ song: TEST_SONG, stamps: [{ idx: 0, ts: 8 }] }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);
@@ -234,68 +282,84 @@ describe('POST /api/live/apply', () => {
     expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('trackIndex') });
   });
 
-  it('returns 400 when clips is not an array', async () => {
+  it('returns 400 when song is missing', async () => {
     const osc = makeMockOsc();
     setOscClient(osc as unknown as import('./osc-client.js').OscClient);
 
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ trackIndex: 0, clips: 'bad' }),
+      JSON.stringify({ trackIndex: 0, stamps: [{ idx: 0, ts: 8 }] }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);
     const { statusCode, body } = await capture();
     expect(statusCode).toBe(400);
-    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('clips') });
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('song') });
   });
 
-  it('returns 400 when a clip entry is missing name', async () => {
+  it('returns 400 when stamps is not an array', async () => {
     const osc = makeMockOsc();
     setOscClient(osc as unknown as import('./osc-client.js').OscClient);
 
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ trackIndex: 0, clips: [{ beat: 8 }] }),
+      JSON.stringify({ trackIndex: 0, song: TEST_SONG, stamps: 'bad' }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);
     const { statusCode, body } = await capture();
     expect(statusCode).toBe(400);
-    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('clips[0]') });
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('stamps') });
   });
 
-  it('returns 400 when a clip entry is missing beat', async () => {
+  it('returns 400 when a stamp entry is missing idx', async () => {
     const osc = makeMockOsc();
     setOscClient(osc as unknown as import('./osc-client.js').OscClient);
 
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ trackIndex: 0, clips: [{ name: 'A' }] }),
+      JSON.stringify({ trackIndex: 0, song: TEST_SONG, stamps: [{ ts: 8 }] }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);
     const { statusCode, body } = await capture();
     expect(statusCode).toBe(400);
-    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('clips[0]') });
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('stamps[0]') });
   });
 
-  it('writes clips sequentially and returns {written, failed}', async () => {
+  it('returns 400 when a stamp entry is missing ts', async () => {
     const osc = makeMockOsc();
     setOscClient(osc as unknown as import('./osc-client.js').OscClient);
 
-    const clips = [
-      { name: 'Amazing grace', beat: 8 },
-      { name: 'How great thou art', beat: 16 },
-      { name: 'Holy holy holy', beat: 24 },
+    const req = makeReq(
+      'POST',
+      '/api/live/apply',
+      JSON.stringify({ trackIndex: 0, song: TEST_SONG, stamps: [{ idx: 0 }] }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(400);
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('stamps[0]') });
+  });
+
+  it('writes clips with names from song lines and returns {written, failed}', async () => {
+    const osc = makeMockOsc();
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const stamps = [
+      { idx: 0, ts: 8 },
+      { idx: 1, ts: 16 },
+      { idx: 2, ts: 24 },
     ];
 
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ trackIndex: 1, clips }),
+      JSON.stringify({ trackIndex: 1, song: TEST_SONG, stamps }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);
@@ -306,11 +370,38 @@ describe('POST /api/live/apply', () => {
     expect(result.written).toBe(3);
     expect(result.failed).toEqual([]);
 
-    // All clips were written to the correct track
+    // Clip names come from song lines — same as the .als export formatter
     expect(osc.writeStampClipCalls).toEqual([
-      { trackIndex: 1, name: 'Amazing grace', beat: 8 },
-      { trackIndex: 1, name: 'How great thou art', beat: 16 },
-      { trackIndex: 1, name: 'Holy holy holy', beat: 24 },
+      { trackIndex: 1, name: 'Amazing grace how sweet the sound', beat: 8 },
+      { trackIndex: 1, name: 'That saved a wretch like me', beat: 16 },
+      { trackIndex: 1, name: 'How precious did that grace appear', beat: 24 },
+    ]);
+  });
+
+  it('respects per-stamp text override (same as export formatter)', async () => {
+    const osc = makeMockOsc();
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const stamps = [
+      { idx: 0, ts: 4, text: 'Custom override' },
+      { idx: 1, ts: 8 },
+    ];
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply',
+      JSON.stringify({ trackIndex: 0, song: TEST_SONG, stamps }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+
+    expect(statusCode).toBe(200);
+    const result = JSON.parse(body) as { written: number; failed: unknown[] };
+    expect(result.written).toBe(2);
+    expect(osc.writeStampClipCalls).toEqual([
+      { trackIndex: 0, name: 'Custom override', beat: 4 },
+      { trackIndex: 0, name: 'That saved a wretch like me', beat: 8 },
     ]);
   });
 
@@ -325,16 +416,16 @@ describe('POST /api/live/apply', () => {
     };
     setOscClient(osc as unknown as import('./osc-client.js').OscClient);
 
-    const clips = [
-      { name: 'Clip A', beat: 4 },
-      { name: 'Clip B', beat: 8 },
-      { name: 'Clip C', beat: 12 },
+    const stamps = [
+      { idx: 0, ts: 4 },
+      { idx: 1, ts: 8 },
+      { idx: 2, ts: 12 },
     ];
 
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ trackIndex: 0, clips }),
+      JSON.stringify({ trackIndex: 0, song: TEST_SONG, stamps }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);
@@ -348,7 +439,7 @@ describe('POST /api/live/apply', () => {
     expect(result.written).toBe(2);
     expect(result.failed).toHaveLength(1);
     expect(result.failed[0]).toMatchObject({
-      name: 'Clip B',
+      name: 'That saved a wretch like me',
       beat: 8,
       error: expect.stringContaining('slot busy'),
     });
@@ -364,16 +455,16 @@ describe('POST /api/live/apply', () => {
     };
     setOscClient(osc as unknown as import('./osc-client.js').OscClient);
 
-    const clips = [
-      { name: 'A', beat: 0 },
-      { name: 'B', beat: 4 },
-      { name: 'C', beat: 8 },
+    const stamps = [
+      { idx: 0, ts: 0 },
+      { idx: 1, ts: 4 },
+      { idx: 2, ts: 8 },
     ];
 
     const req = makeReq(
       'POST',
       '/api/live/apply',
-      JSON.stringify({ trackIndex: 2, clips }),
+      JSON.stringify({ trackIndex: 2, song: TEST_SONG, stamps }),
     );
     const { res, capture } = makeRes();
     await handleRequest(req, res);

@@ -486,6 +486,25 @@ async function handlePostExportZip(
 // Live-write routes (Issue C)
 // ---------------------------------------------------------------------------
 
+/**
+ * Convert an array of LyricStamps (song-relative) into the { name, beat }
+ * pairs that writeStampClip expects. This is the single source of truth for
+ * clip-name formatting — identical output to the /api/export/als route so
+ * live-applied clips and .als export clips carry the same names.
+ *
+ * Each stamp's `text` field (per-stamp override) takes precedence over the
+ * song line text, matching how the .als export builds clip names.
+ */
+export function stampsToClips(
+  song: { lines: Array<{ text?: string }> },
+  stamps: Array<{ idx: number; ts: number; text?: string }>,
+): Array<{ name: string; beat: number }> {
+  return stamps.map((stamp) => ({
+    name: stamp.text ?? song.lines[stamp.idx]?.text ?? '',
+    beat: stamp.ts,
+  }));
+}
+
 async function handleGetLiveTracks(
   _req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -540,29 +559,42 @@ async function handlePostLiveApply(
     return;
   }
 
-  if (!Array.isArray(b.clips)) {
-    json(res, 400, { error: 'Missing or invalid field: clips (array)' });
+  // Accept { trackIndex, song, stamps } — compute clip names server-side from
+  // the song lines + per-stamp text overrides, identical to the .als export.
+  if (
+    typeof b.song !== 'object' ||
+    b.song === null ||
+    !Array.isArray((b.song as Record<string, unknown>).lines)
+  ) {
+    json(res, 400, { error: 'Missing or invalid field: song (object with lines array)' });
     return;
   }
 
-  const rawClips = b.clips as unknown[];
+  if (!Array.isArray(b.stamps)) {
+    json(res, 400, { error: 'Missing or invalid field: stamps (array)' });
+    return;
+  }
 
-  for (let i = 0; i < rawClips.length; i++) {
-    const c = rawClips[i];
+  const rawStamps = b.stamps as unknown[];
+
+  for (let i = 0; i < rawStamps.length; i++) {
+    const s = rawStamps[i];
     if (
-      typeof c !== 'object' ||
-      c === null ||
-      typeof (c as Record<string, unknown>).name !== 'string' ||
-      typeof (c as Record<string, unknown>).beat !== 'number'
+      typeof s !== 'object' ||
+      s === null ||
+      typeof (s as Record<string, unknown>).idx !== 'number' ||
+      typeof (s as Record<string, unknown>).ts !== 'number'
     ) {
       json(res, 400, {
-        error: `clips[${i}] must have name (string) and beat (number)`,
+        error: `stamps[${i}] must have idx (number) and ts (number)`,
       });
       return;
     }
   }
 
-  const clips = rawClips as { name: string; beat: number }[];
+  const songObj = b.song as { lines: Array<{ text?: string }> };
+  const stampInputs = rawStamps as Array<{ idx: number; ts: number; text?: string }>;
+  const clips = stampsToClips(songObj, stampInputs);
   const trackIndex = b.trackIndex as number;
 
   let written = 0;
