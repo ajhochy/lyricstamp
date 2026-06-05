@@ -13,12 +13,35 @@ import { usePdf } from './use-pdf';
 import { LyricsView, LeadsheetView, TweaksUI, type StampRow, type LeadsheetStamp } from './views';
 import { useTweaks, type Tweaks } from './use-tweaks';
 import { usePersistentState } from './use-persistent-state';
+import { savePdf, loadPdf, clearPdf } from './pdf-store';
+import {
+  listSessions,
+  saveSession,
+  getSession,
+  deleteSession,
+  type SessionMeta,
+  type SessionState,
+} from './session-store';
 import { useLive } from './use-live';
 import type { Song } from '../../shared/types';
 
 // ---------------------------------------------------------------------------
 // Tweak defaults — must match Tweaks type from use-tweaks.ts.
 // ---------------------------------------------------------------------------
+/** Compact "saved at" label for the sessions list, e.g. "Jun 4, 7:12 PM". */
+function fmtSavedAt(ts: number): string {
+  try {
+    return new Date(ts).toLocaleString([], {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  } catch {
+    return '';
+  }
+}
+
 const TWEAK_DEFAULTS: Tweaks = {
   theme: 'dark',
   accent: 'teal',
@@ -57,10 +80,33 @@ export function App() {
     setPlaying(liveConnectedPlaying);
   }, [liveConnectedPlaying]);
 
+  // Transport control — sends a command to Ableton over the WebSocket and
+  // optimistically updates the local play indicator (the next OSC tick, ~100ms,
+  // confirms or corrects it).
+  const transport = useCallback(
+    (action: 'play' | 'pause' | 'stop') => {
+      sendCommand({ type: 'transport', action });
+      setPlaying(action === 'play');
+    },
+    [sendCommand],
+  );
+
   // Stamps
   const [stamps, setStamps] = usePersistentState<InitialStamp[]>('stamps', []);
   const [cursor, setCursor] = usePersistentState<number>('cursor', 0);
   const [flashIdx, setFlashIdx] = useState<number | null>(null);
+
+  // Seek the Ableton playhead to a stamp's position and move the lyric cursor
+  // to that line so the preview follows. Wired to stamp-log row clicks.
+  const seekToStamp = useCallback(
+    (stampIndex: number) => {
+      const s = stamps[stampIndex];
+      if (!s) return;
+      sendCommand({ type: 'transport', action: 'seek', ts: s.ts });
+      setCursor(s.idx);
+    },
+    [stamps, sendCommand, setCursor],
+  );
 
   // Keyboard pressed visual indicator
   const [pressed, setPressed] = useState<string | null>(null);
@@ -77,8 +123,141 @@ export function App() {
   // Leadsheet
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const pageRenderer = usePdf(pdfFile);
-  const [pdfPage, setPdfPage] = useState<number>(1);
-  const [leadsheetStamps, setLeadsheetStamps] = useState<LeadsheetStamp[]>([]);
+  // Leadsheet session persists across reloads: page + stamps in localStorage,
+  // the PDF binary in IndexedDB (see pdf-store).
+  const [pdfPage, setPdfPage] = usePersistentState<number>('pdfPage', 1);
+  const [leadsheetStamps, setLeadsheetStamps] = usePersistentState<LeadsheetStamp[]>(
+    'leadsheetStamps',
+    [],
+  );
+
+  // Restore the persisted PDF on mount so the leadsheet stamp log isn't orphaned.
+  useEffect(() => {
+    let cancelled = false;
+    loadPdf()
+      .then((file) => {
+        if (!cancelled && file) setPdfFile(file);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Leadsheet: deliberately stamp the current page at the current playback time.
+  // setLeadsheetStamps is a stable useState setter (via usePersistentState).
+  const stampLeadsheetPage = useCallback(() => {
+    setLeadsheetStamps((arr) => [...arr, { page: pdfPage, region: '', ts: time }]);
+  }, [pdfPage, time, setLeadsheetStamps]);
+
+  // Leadsheet: remove a stamp by index.
+  const removeLeadsheetStamp = useCallback((i: number) => {
+    setLeadsheetStamps((arr) => arr.filter((_, j) => j !== i));
+  }, [setLeadsheetStamps]);
+
+  // ---- Named sessions ----
+  const [sessionsOpen, setSessionsOpen] = useState<boolean>(false);
+  const [sessionList, setSessionList] = useState<SessionMeta[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessionNameDraft, setSessionNameDraft] = useState<string>('');
+
+  const refreshSessions = useCallback(() => {
+    listSessions().then(setSessionList).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refreshSessions();
+  }, [refreshSessions]);
+
+  const handleSaveSession = useCallback(
+    async (forceNew: boolean) => {
+      const name = sessionNameDraft.trim() || songName.trim() || 'Untitled session';
+      const state: SessionState = { song, songName, pasteText, stamps, cursor, tab, pdfPage, leadsheetStamps };
+      try {
+        const id = await saveSession(
+          name,
+          state,
+          pdfFile,
+          forceNew ? undefined : currentSessionId ?? undefined,
+          Date.now(),
+        );
+        setCurrentSessionId(id);
+        setSessionNameDraft(name);
+        refreshSessions();
+        pushToast(`Saved session "${name}"`);
+      } catch {
+        pushToast('Failed to save session');
+      }
+    },
+    [sessionNameDraft, songName, song, pasteText, stamps, cursor, tab, pdfPage, leadsheetStamps, pdfFile, currentSessionId, refreshSessions, pushToast],
+  );
+
+  const handleLoadSession = useCallback(
+    async (id: string) => {
+      try {
+        const full = await getSession(id);
+        if (!full) {
+          pushToast('Session not found');
+          return;
+        }
+        const s = full.state;
+        setSong(s.song);
+        setSongName(s.songName);
+        setPasteText(s.pasteText);
+        setStamps(s.stamps);
+        setCursor(s.cursor);
+        setTab(s.tab);
+        setPdfPage(s.pdfPage);
+        setLeadsheetStamps(s.leadsheetStamps);
+        if (full.pdf) {
+          setPdfFile(full.pdf);
+          savePdf(full.pdf).catch(() => {});
+        } else {
+          setPdfFile(null);
+          clearPdf().catch(() => {});
+        }
+        setCurrentSessionId(full.meta.id);
+        setSessionNameDraft(full.meta.name);
+        setSessionsOpen(false);
+        pushToast(`Loaded "${full.meta.name}"`);
+      } catch {
+        pushToast('Failed to load session');
+      }
+    },
+    [pushToast, setSong, setSongName, setPasteText, setStamps, setCursor, setTab, setPdfPage, setLeadsheetStamps],
+  );
+
+  const handleDeleteSession = useCallback(
+    async (id: string) => {
+      try {
+        await deleteSession(id);
+        if (currentSessionId === id) setCurrentSessionId(null);
+        refreshSessions();
+      } catch {
+        pushToast('Failed to delete session');
+      }
+    },
+    [currentSessionId, refreshSessions, pushToast],
+  );
+
+  const handleNewSession = useCallback(() => {
+    const hasWork = stamps.length > 0 || leadsheetStamps.length > 0 || pasteText.trim() !== '';
+    if (hasWork && !window.confirm('Start a new blank session? Unsaved changes to the current working session will be cleared (saved sessions are not affected).')) {
+      return;
+    }
+    setSong(EMPTY_SONG);
+    setSongName('');
+    setPasteText('');
+    setStamps([]);
+    setCursor(0);
+    setLeadsheetStamps([]);
+    setPdfPage(1);
+    setPdfFile(null);
+    clearPdf().catch(() => {});
+    setCurrentSessionId(null);
+    setSessionNameDraft('');
+    setSessionsOpen(false);
+  }, [stamps.length, leadsheetStamps.length, pasteText, setSong, setSongName, setPasteText, setStamps, setCursor, setLeadsheetStamps, setPdfPage]);
 
   // ---- Cursor lookup helpers ----
   const lineCount = useMemo(
@@ -280,10 +459,21 @@ export function App() {
 
       const filename = `${song.name.replace(/\s+/g, '_')}.zip`;
 
+      // Include lyric stamps so the bundled .als populates BOTH tracks
+      // (lyrics + leadsheet) when the user has stamped lyrics in this session.
+      const lyricStamps = stamps.map((s) => ({
+        ts: s.ts,
+        text: song.lines[s.idx]?.text ?? '',
+      }));
+
+      // Name the Lyrics subfolder after the loaded PDF (sans extension), matching
+      // AbleSet's own export convention.
+      const leadsheetName = (pdfFile?.name ?? 'leadsheet').replace(/\.pdf$/i, '');
+
       const res = await fetch('/api/export/zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ song, stamps: sheetStamps }),
+        body: JSON.stringify({ song, stamps: sheetStamps, lyricStamps, leadsheetName }),
       });
 
       if (!res.ok) {
@@ -316,7 +506,7 @@ export function App() {
     } finally {
       setExportingLeadsheet(false);
     }
-  }, [pdfFile, leadsheetStamps, pageRenderer, song, pushToast]);
+  }, [pdfFile, leadsheetStamps, pageRenderer, song, stamps, pushToast]);
 
   const exportFile = useCallback(() => {
     if (tab === 'lyrics') {
@@ -347,14 +537,9 @@ export function App() {
         if (tab === 'lyrics') {
           stamp(1);
         } else {
-          setPdfPage((p) => {
-            const next = Math.min(Math.max(pageRenderer.pageCount, 1), p + 1);
-            setLeadsheetStamps((arr) => [
-              ...arr,
-              { page: next, region: '', ts: time },
-            ]);
-            return next;
-          });
+          // Leadsheet: navigate pages only. Stamping is a deliberate action
+          // (the "Stamp page" button) — navigating must never create stamps.
+          setPdfPage((p) => Math.min(Math.max(pageRenderer.pageCount, 1), p + 1));
         }
         setPressed('right');
         setTimeout(() => setPressed(null), 160);
@@ -363,14 +548,7 @@ export function App() {
         if (tab === 'lyrics') {
           stamp(-1);
         } else {
-          setPdfPage((p) => {
-            const next = Math.max(1, p - 1);
-            setLeadsheetStamps((arr) => [
-              ...arr,
-              { page: next, region: '', ts: time },
-            ]);
-            return next;
-          });
+          setPdfPage((p) => Math.max(1, p - 1));
         }
         setPressed('left');
         setTimeout(() => setPressed(null), 160);
@@ -378,8 +556,21 @@ export function App() {
         exportFile();
         setPressed('e');
         setTimeout(() => setPressed(null), 160);
+      } else if (e.code === 'Enter' && tab === 'leadsheet') {
+        // Stamp the current leadsheet page at the current time (stay on page).
+        e.preventDefault();
+        stampLeadsheetPage();
+        setPressed('enter');
+        setTimeout(() => setPressed(null), 160);
       } else if (e.key.toLowerCase() === 't') {
         setTab((x) => (x === 'lyrics' ? 'leadsheet' : 'lyrics'));
+      } else if (e.key.toLowerCase() === 's') {
+        // Stop: return the playhead to the start. After this, Space (play)
+        // resumes from 0, i.e. plays from the beginning.
+        e.preventDefault();
+        transport('stop');
+        setPressed('s');
+        setTimeout(() => setPressed(null), 160);
       } else if (e.code === 'ArrowUp' && tab === 'lyrics') {
         e.preventDefault();
         const prev = findNextTextLine(cursor, -1);
@@ -396,8 +587,8 @@ export function App() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-    // setCursor / setTab are stable useState setters (via usePersistentState).
-  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand, pageRenderer.pageCount, findNextTextLine, setCursor, setTab]);
+    // setCursor / setTab / setPdfPage are stable useState setters (via usePersistentState).
+  }, [cursor, time, tab, stamps, stamp, exportFile, sendCommand, transport, stampLeadsheetPage, pageRenderer.pageCount, findNextTextLine, setCursor, setTab, setPdfPage]);
 
   // ---- Auto-scroll log to bottom on new stamp ----
   const logScrollRef = useRef<HTMLDivElement>(null);
@@ -460,9 +651,35 @@ export function App() {
         <span className="header-divider" />
 
         <div className="live-meter">
-          <span className={`play-state${playing ? ' playing' : ''}`}>
-            <Icon name={playing ? 'pause' : 'play'} size={11} />
-          </span>
+          <div className="transport" role="group" aria-label="Transport controls">
+            <button
+              className={`tbtn${playing ? ' active' : ''}`}
+              onClick={() => transport('play')}
+              disabled={!connected}
+              title="Play (resume from current position)"
+              aria-label="Play"
+            >
+              <Icon name="play" size={12} />
+            </button>
+            <button
+              className="tbtn"
+              onClick={() => transport('pause')}
+              disabled={!connected}
+              title="Pause (stay at current position)"
+              aria-label="Pause"
+            >
+              <Icon name="pause" size={12} />
+            </button>
+            <button
+              className="tbtn"
+              onClick={() => transport('stop')}
+              disabled={!connected}
+              title="Stop (return to start)"
+              aria-label="Stop and return to start"
+            >
+              <Icon name="stop" size={12} />
+            </button>
+          </div>
           <span className="time">
             {fmt(time).split('.')[0]}
             <span className="ms">.{fmt(time).split('.')[1]}</span>
@@ -492,6 +709,69 @@ export function App() {
         </div>
 
         <div className="header-actions">
+          <div className="sessions">
+            <button
+              className="btn"
+              onClick={() => {
+                setSessionsOpen((o) => !o);
+                refreshSessions();
+                setSessionNameDraft((d) => d || songName);
+              }}
+              title="Save and switch between named sessions"
+            >
+              <Icon name="file" size={12} />
+              Sessions{currentSessionId ? ' •' : ''}
+            </button>
+            {sessionsOpen && (
+              <div className="sessions-menu">
+                <div className="sessions-save">
+                  <input
+                    className="input"
+                    value={sessionNameDraft}
+                    placeholder="Session name"
+                    onChange={(e) => setSessionNameDraft(e.target.value)}
+                  />
+                  <button className="btn primary" onClick={() => handleSaveSession(false)}>
+                    {currentSessionId ? 'Update' : 'Save'}
+                  </button>
+                </div>
+                <div className="sessions-row-actions">
+                  <button className="btn" onClick={() => handleSaveSession(true)}>Save as new</button>
+                  <button className="btn" onClick={handleNewSession}>New blank</button>
+                </div>
+                <div className="sessions-list">
+                  {sessionList.length === 0 && (
+                    <div className="sessions-empty">No saved sessions yet</div>
+                  )}
+                  {sessionList.map((s) => (
+                    <div
+                      key={s.id}
+                      className={`session-row${s.id === currentSessionId ? ' current' : ''}`}
+                    >
+                      <button
+                        className="session-load"
+                        onClick={() => handleLoadSession(s.id)}
+                        title="Load this session"
+                      >
+                        <span className="session-name">{s.name}</span>
+                        <span className="session-meta">
+                          {s.hasPdf ? 'PDF · ' : ''}
+                          {fmtSavedAt(s.savedAt)}
+                        </span>
+                      </button>
+                      <button
+                        className="session-del"
+                        onClick={() => handleDeleteSession(s.id)}
+                        title="Delete this session"
+                      >
+                        <Icon name="x" size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <button
             className="btn primary"
             onClick={exportFile}
@@ -526,6 +806,7 @@ export function App() {
             stampRows={stampRows}
             stampsCount={stamps.length}
             onUndo={undoStamp}
+            onSeek={seekToStamp}
             logScrollRef={logScrollRef}
             tweaks={tweaks}
           />
@@ -536,11 +817,17 @@ export function App() {
             page={pdfPage}
             setPage={setPdfPage}
             stamps={leadsheetStamps}
+            onStampPage={stampLeadsheetPage}
+            onRemove={removeLeadsheetStamp}
             tweaks={tweaks}
             pdfFile={pdfFile}
             onPdfChange={(file) => {
               setPdfFile(file);
               setPdfPage(1);
+              // Persist the new PDF (and clear leadsheet stamps that belonged to
+              // the previous PDF — they'd point at the wrong pages).
+              setLeadsheetStamps([]);
+              savePdf(file).catch(() => {});
             }}
             pageRenderer={pageRenderer}
           />
@@ -554,6 +841,16 @@ export function App() {
             <span className={`kbd wide${pressed === 'space' ? ' pressed' : ''}`}>SPACE</span>
             {playing ? 'Pause' : 'Play'}
           </span>
+          <span className="hint">
+            <span className={`kbd${pressed === 's' ? ' pressed' : ''}`}>S</span>
+            Stop (to start)
+          </span>
+          {tab === 'leadsheet' && (
+            <span className="hint">
+              <span className={`kbd wide${pressed === 'enter' ? ' pressed' : ''}`}>ENTER</span>
+              Stamp page
+            </span>
+          )}
           <span className="hint">
             <span className={`kbd${pressed === 'right' ? ' pressed' : ''}`}>→</span>
             {tab === 'lyrics' ? 'Stamp & advance' : 'Next page'}

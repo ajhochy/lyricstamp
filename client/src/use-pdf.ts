@@ -102,7 +102,10 @@ export function usePdf(file: File | null): PdfRenderer {
       const page = await getPage(pageNum);
       if (!page) return '';
 
-      const scale = 1.5 * window.devicePixelRatio;
+      // Export resolution is decoupled from the screen: render at a fixed high
+      // scale so full-screen leadsheet pages in AbleSet stay crisp regardless of
+      // the user's display DPR. ~Letter page → ~1650px wide at scale 2.7.
+      const scale = 2.7;
       const viewport = page.getViewport({ scale });
 
       const offscreen = document.createElement('canvas');

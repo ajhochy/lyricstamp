@@ -56,6 +56,7 @@ export interface LyricsViewProps {
   stampRows: StampRow[];
   stampsCount: number;
   onUndo: (i: number) => void;
+  onSeek: (i: number) => void;
   logScrollRef: React.RefObject<HTMLDivElement>;
   tweaks: Tweaks;
 }
@@ -66,7 +67,7 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
     setupOpen, setSetupOpen,
     currentLine, currentSection, nextLine,
     lineIndex, lineTotal,
-    stampRows, stampsCount, onUndo,
+    stampRows, stampsCount, onUndo, onSeek,
     logScrollRef, tweaks,
   } = props;
 
@@ -160,13 +161,27 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
               }
               return (
                 <div
-                  className={`log-row${r.recent ? ' recent' : ''}${r.flash ? ' flash' : ''}`}
+                  className={`log-row clickable${r.recent ? ' recent' : ''}${r.flash ? ' flash' : ''}`}
                   key={r.i}
+                  onClick={() => onSeek(r.i)}
+                  title="Jump playhead to this stamp"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSeek(r.i);
+                    }
+                  }}
                 >
                   <span className="ts">{fmt(r.ts)}</span>
                   <span className="idx">#{String(r.i + 1).padStart(2, '0')}</span>
                   <span className="text" title={r.text}>{r.text}</span>
-                  <button className="undo" onClick={() => onUndo(r.i)} title="Undo stamp">
+                  <button
+                    className="undo"
+                    onClick={(e) => { e.stopPropagation(); onUndo(r.i); }}
+                    title="Undo stamp"
+                  >
                     <Icon name="undo" size={11} />
                   </button>
                 </div>
@@ -203,6 +218,8 @@ export interface LeadsheetViewProps {
   page: number;
   setPage: (page: number) => void;
   stamps: LeadsheetStamp[];
+  onStampPage: () => void;
+  onRemove: (i: number) => void;
   tweaks: Tweaks;
   pdfFile: File | null;
   onPdfChange: (file: File) => void;
@@ -215,6 +232,8 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
   page,
   setPage,
   stamps,
+  onStampPage,
+  onRemove,
   tweaks,
   pdfFile,
   onPdfChange,
@@ -335,6 +354,15 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
               >
                 <Icon name="chevron-right" size={14} />
               </button>
+              <button
+                className="btn primary"
+                onClick={onStampPage}
+                disabled={!pdfFile}
+                title="Stamp this page at the current playback time"
+                style={{ marginLeft: 10 }}
+              >
+                <Icon name="check" size={12} /> Stamp page
+              </button>
             </div>
           </div>
         </div>
@@ -355,7 +383,7 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
                 <span className="text" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                   [img:page{s.page}.png] · {s.region}
                 </span>
-                <button className="undo" title="Undo stamp">
+                <button className="undo" onClick={() => onRemove(i)} title="Remove stamp">
                   <Icon name="undo" size={11} />
                 </button>
               </div>

@@ -243,6 +243,142 @@ html, body {
   color: var(--accent-strong);
 }
 
+/* Transport controls (Play / Pause / Stop) */
+.transport {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px;
+}
+.transport .tbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-1);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.transport .tbtn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+.transport .tbtn.active {
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+.transport .tbtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Sessions menu */
+.sessions {
+  position: relative;
+}
+.sessions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  width: 300px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sessions-save {
+  display: flex;
+  gap: 6px;
+}
+.sessions-save .input {
+  flex: 1;
+}
+.sessions-row-actions {
+  display: flex;
+  gap: 6px;
+}
+.sessions-row-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.sessions-empty {
+  color: var(--fg-3);
+  font-size: 12px;
+  padding: 10px 4px;
+  text-align: center;
+}
+.session-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 7px;
+}
+.session-row.current {
+  background: var(--accent-bg);
+}
+.session-load {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 9px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--fg-1);
+  text-align: left;
+}
+.session-load:hover {
+  background: var(--bg-3);
+}
+.session-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-0);
+}
+.session-meta {
+  font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.02em;
+}
+.session-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.session-del:hover {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+
 /* Tabs */
 .tabs {
   display: inline-flex;
@@ -555,6 +691,8 @@ html, body {
   cursor: default;
 }
 .log-row:hover { background: var(--bg-2); }
+.log-row.clickable { cursor: pointer; }
+.log-row.clickable:hover { background: var(--accent-bg); }
 .log-row .ts { color: var(--fg-2); font-variant-numeric: tabular-nums; font-weight: 500; }
 .log-row .idx { color: var(--fg-4); font-size: 10px; text-align: right; }
 .log-row .text {

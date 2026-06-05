@@ -23,6 +23,8 @@ export const Icon: React.FC<IconProps> = ({ name, size = 14, ...rest }) => {
       return <svg {...common}><polygon points="7 5 19 12 7 19 7 5" fill="currentColor" stroke="none"/></svg>;
     case 'pause':
       return <svg {...common}><rect x="7" y="5" width="3.5" height="14" fill="currentColor" stroke="none" rx="0.5"/><rect x="13.5" y="5" width="3.5" height="14" fill="currentColor" stroke="none" rx="0.5"/></svg>;
+    case 'stop':
+      return <svg {...common}><rect x="6" y="6" width="12" height="12" fill="currentColor" stroke="none" rx="1"/></svg>;
     case 'chevron-right':
       return <svg {...common}><polyline points="9 6 15 12 9 18"/></svg>;
     case 'chevron-left':
