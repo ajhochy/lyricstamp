@@ -1,0 +1,38 @@
+{
+  "run_id": "2026-06-05-live-apply-clip-length",
+  "issue": 32,
+  "date": "2026-06-05",
+  "smoke_result": "fail",
+  "verification_claimed": "PASS",
+  "divergence": true,
+  "summary": "Manual Ableton smoke of live-stamp-write (dev mode): 'Apply to Ableton' DID write named clips into the live Arrangement at the correct beats (core mechanism works). But every clip is 1 beat long, so AbleSet only shows each lyric for 1 beat — lyrics must persist until the next line. Clips must extend from their beat to the START OF THE NEXT stamp (last clip = DEFAULT_CLIP_LENGTH), exactly as the .als export already does (als-writer.ts:218).",
+  "criteria_results": [
+    {
+      "criterion_id": "live-apply-c1",
+      "text": "Apply writes named clips into the Arrangement at correct beats",
+      "contract_status": "present",
+      "smoke_status": "pass",
+      "category": "C1",
+      "notes": "Confirmed live: clips appear at correct beats with correct names; OSC probe + in-app Apply both worked."
+    },
+    {
+      "criterion_id": "live-apply-c2",
+      "text": "Clips span to the next lyric so AbleSet displays each lyric until the next line",
+      "contract_status": "absent",
+      "smoke_status": "fail",
+      "category": "C3",
+      "notes": "Clips are hardcoded 1-beat (writeStampClip create_clip(...,1.0); stampsToClips returns no length). AbleSet only shows a lyric while its clip is active, so 1-beat clips make lyrics vanish after 1 beat. The .als export path already lengths clips correctly (als-writer.ts:218: end = next beat, last = DEFAULT_CLIP_LENGTH=4) — live-apply must match."
+    }
+  ],
+  "process_issues": [
+    "Planner explicitly deferred clip-length-to-next-stamp as a follow-up ('Arrangement clip = 1 beat for now'); manual smoke promoted it to a required behavior. Lesson: when an export path already encodes a correctness-critical length, the live path that replaces it must match it, not defer it.",
+    "Repair done in-process (not via a separate diagnostic agent) because root cause was fully determined from the smoke note + als-writer reference."
+  ],
+  "workflow_adherence": {
+    "expected_chain": ["coding-agent", "verification-gate", "manual-smoke", "failure-postmortem", "repair", "verification-gate"],
+    "observed_chain": ["coding-agent (server)", "coding-agent (client)", "coding-agent (install)", "verification-gate PASS", "manual-smoke FAIL (clip length)", "failure-postmortem (this)"],
+    "skipped_skills": [],
+    "issues": [],
+    "overall_score": "partial"
+  }
+}

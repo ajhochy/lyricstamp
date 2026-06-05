@@ -329,18 +329,22 @@ export class OscClient extends EventEmitter<OscClientEvents> {
   /**
    * Write a named clip to the Arrangement at `beat` on `trackIndex`.
    *
+   * `length` (beats) sets the clip's duration so it spans to the next stamp —
+   * AbleSet only shows a lyric while its clip is active on the timeline.
+   *
    * Sequence (using scratch slot 0):
-   *   1. create_clip(trackIndex, 0, 1.0)  — fire-and-forget
-   *   2. set/name(trackIndex, 0, name)    — fire-and-forget
+   *   1. create_clip(trackIndex, 0, length) — fire-and-forget
+   *   2. set/name(trackIndex, 0, name)      — fire-and-forget
    *   3. duplicate_clip_to_arrangement(trackIndex, 0, beat) — await reply
-   *   4. delete_clip(trackIndex, 0)       — fire-and-forget
+   *   4. delete_clip(trackIndex, 0)         — fire-and-forget
    */
   async writeStampClip(
     trackIndex: number,
     name: string,
     beat: number,
+    length = 1.0,
   ): Promise<void> {
-    this._oscSend(ADDR_CREATE_CLIP, trackIndex, 0, 1.0);
+    this._oscSend(ADDR_CREATE_CLIP, trackIndex, 0, length);
     this._oscSend(ADDR_SET_CLIP_NAME, trackIndex, 0, name);
 
     await this._request(

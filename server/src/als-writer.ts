@@ -254,7 +254,7 @@ function beatStr(beats: number): string {
   return parseFloat(beats.toFixed(6)).toString();
 }
 
-const DEFAULT_CLIP_LENGTH = 4; // beats — fallback for the last clip when no next stamp
+export const DEFAULT_CLIP_LENGTH = 4; // beats — fallback for the last clip when no next stamp
 
 /**
  * Build a single MidiClip XML snippet for insertion into ArrangerAutomation > Events.

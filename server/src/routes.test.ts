@@ -19,10 +19,10 @@ import { handleRequest, setOscClient, stampsToClips } from './routes.js';
 interface MockOsc {
   connected: boolean;
   listTracksResult: { index: number; name: string }[] | Error;
-  writeStampClipCalls: { trackIndex: number; name: string; beat: number }[];
+  writeStampClipCalls: { trackIndex: number; name: string; beat: number; length: number }[];
   writeStampClipError: Error | null;
   listTracks(): Promise<{ index: number; name: string }[]>;
-  writeStampClip(trackIndex: number, name: string, beat: number): Promise<void>;
+  writeStampClip(trackIndex: number, name: string, beat: number, length: number): Promise<void>;
   probeHandler(): Promise<boolean>;
 }
 
@@ -38,11 +38,11 @@ function makeMockOsc(overrides?: Partial<MockOsc>): MockOsc {
       }
       return Promise.resolve(this.listTracksResult as { index: number; name: string }[]);
     },
-    writeStampClip(trackIndex, name, beat) {
+    writeStampClip(trackIndex, name, beat, length) {
       if (this.writeStampClipError) {
         return Promise.reject(this.writeStampClipError);
       }
-      this.writeStampClipCalls.push({ trackIndex, name, beat });
+      this.writeStampClipCalls.push({ trackIndex, name, beat, length });
       return Promise.resolve();
     },
     probeHandler() {
@@ -215,9 +215,9 @@ describe('stampsToClips', () => {
       { idx: 2, ts: 24 },
     ];
     expect(stampsToClips(TEST_SONG, stamps)).toEqual([
-      { name: 'Amazing grace how sweet the sound', beat: 8 },
-      { name: 'That saved a wretch like me', beat: 16 },
-      { name: 'How precious did that grace appear', beat: 24 },
+      { name: 'Amazing grace how sweet the sound', beat: 8, length: 8 },
+      { name: 'That saved a wretch like me', beat: 16, length: 8 },
+      { name: 'How precious did that grace appear', beat: 24, length: 4 },
     ]);
   });
 
@@ -227,14 +227,24 @@ describe('stampsToClips', () => {
       { idx: 1, ts: 8 },
     ];
     expect(stampsToClips(TEST_SONG, stamps)).toEqual([
-      { name: 'Custom override', beat: 4 },
-      { name: 'That saved a wretch like me', beat: 8 },
+      { name: 'Custom override', beat: 4, length: 4 },
+      { name: 'That saved a wretch like me', beat: 8, length: 4 },
     ]);
   });
 
   it('returns empty string for out-of-bounds idx', () => {
     const stamps = [{ idx: 99, ts: 4 }];
-    expect(stampsToClips(TEST_SONG, stamps)).toEqual([{ name: '', beat: 4 }]);
+    expect(stampsToClips(TEST_SONG, stamps)).toEqual([{ name: '', beat: 4, length: 4 }]);
+  });
+
+  it('clip length spans to the next stamp; last clip uses the default', () => {
+    const stamps = [
+      { idx: 0, ts: 0 },
+      { idx: 1, ts: 6 },
+    ];
+    const clips = stampsToClips(TEST_SONG, stamps);
+    expect(clips[0].length).toBe(6); // 6 - 0
+    expect(clips[1].length).toBe(4); // last → DEFAULT_CLIP_LENGTH
   });
 });
 
@@ -372,9 +382,9 @@ describe('POST /api/live/apply', () => {
 
     // Clip names come from song lines — same as the .als export formatter
     expect(osc.writeStampClipCalls).toEqual([
-      { trackIndex: 1, name: 'Amazing grace how sweet the sound', beat: 8 },
-      { trackIndex: 1, name: 'That saved a wretch like me', beat: 16 },
-      { trackIndex: 1, name: 'How precious did that grace appear', beat: 24 },
+      { trackIndex: 1, name: 'Amazing grace how sweet the sound', beat: 8, length: 8 },
+      { trackIndex: 1, name: 'That saved a wretch like me', beat: 16, length: 8 },
+      { trackIndex: 1, name: 'How precious did that grace appear', beat: 24, length: 4 },
     ]);
   });
 
@@ -400,8 +410,8 @@ describe('POST /api/live/apply', () => {
     const result = JSON.parse(body) as { written: number; failed: unknown[] };
     expect(result.written).toBe(2);
     expect(osc.writeStampClipCalls).toEqual([
-      { trackIndex: 0, name: 'Custom override', beat: 4 },
-      { trackIndex: 0, name: 'That saved a wretch like me', beat: 8 },
+      { trackIndex: 0, name: 'Custom override', beat: 4, length: 4 },
+      { trackIndex: 0, name: 'That saved a wretch like me', beat: 8, length: 4 },
     ]);
   });
 
@@ -409,10 +419,10 @@ describe('POST /api/live/apply', () => {
     let callCount = 0;
     const osc = makeMockOsc();
     // Fail the second clip
-    osc.writeStampClip = async function (trackIndex, name, beat) {
+    osc.writeStampClip = async function (trackIndex, name, beat, length) {
       callCount++;
       if (callCount === 2) throw new Error('slot busy');
-      this.writeStampClipCalls.push({ trackIndex, name, beat });
+      this.writeStampClipCalls.push({ trackIndex, name, beat, length });
     };
     setOscClient(osc as unknown as import('./osc-client.js').OscClient);
 

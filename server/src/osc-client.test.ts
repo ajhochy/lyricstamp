@@ -159,11 +159,12 @@ describe('OscClient.writeStampClip', () => {
       ['/live/track/duplicate_clip_to_arrangement', 3, 0, 16],
     );
 
-    await mock.writeStampClip(3, 'How great thou art', 16);
+    await mock.writeStampClip(3, 'How great thou art', 16, 8);
 
     const [create, setName, duplicate, deleteClip] = mock.sent;
 
-    expect(create.args).toEqual([3, 0, 1.0]);
+    // create_clip uses the passed length so the arrangement clip spans to the next stamp
+    expect(create.args).toEqual([3, 0, 8]);
     expect(setName.args).toEqual([3, 0, 'How great thou art']);
     expect(duplicate.args).toEqual([3, 0, 16]);
     expect(deleteClip.args).toEqual([3, 0]);

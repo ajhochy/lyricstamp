@@ -2,7 +2,7 @@ import type http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, extname } from 'node:path';
 import { parseChordPro } from './chordpro.js';
-import { writeAlsFile, type AlsTrackSpec } from './als-writer.js';
+import { writeAlsFile, DEFAULT_CLIP_LENGTH, type AlsTrackSpec } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
 import type { Song, LyricStamp, SheetStamp } from '../../shared/types.js';
 import {
@@ -498,11 +498,21 @@ async function handlePostExportZip(
 export function stampsToClips(
   song: { lines: Array<{ text?: string }> },
   stamps: Array<{ idx: number; ts: number; text?: string }>,
-): Array<{ name: string; beat: number }> {
-  return stamps.map((stamp) => ({
-    name: stamp.text ?? song.lines[stamp.idx]?.text ?? '',
-    beat: stamp.ts,
-  }));
+): Array<{ name: string; beat: number; length: number }> {
+  // Each clip extends to the NEXT stamp's beat so AbleSet shows the lyric until
+  // the next line (it only displays a lyric while its clip is active). The last
+  // clip falls back to DEFAULT_CLIP_LENGTH. Identical to the .als export
+  // (als-writer: end = next beat, last = start + DEFAULT_CLIP_LENGTH).
+  return stamps.map((stamp, idx) => {
+    const beat = stamp.ts;
+    const next = stamps[idx + 1];
+    const length = next && next.ts > beat ? next.ts - beat : DEFAULT_CLIP_LENGTH;
+    return {
+      name: stamp.text ?? song.lines[stamp.idx]?.text ?? '',
+      beat,
+      length,
+    };
+  });
 }
 
 async function handleGetLiveTracks(
@@ -603,7 +613,7 @@ async function handlePostLiveApply(
   // Write clips sequentially — they all reuse scratch slot 0; concurrent writes would collide.
   for (const clip of clips) {
     try {
-      await _oscClient.writeStampClip(trackIndex, clip.name, clip.beat);
+      await _oscClient.writeStampClip(trackIndex, clip.name, clip.beat, clip.length);
       written++;
     } catch (err) {
       failed.push({
