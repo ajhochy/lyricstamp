@@ -671,6 +671,21 @@ html, body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
+}
+/* Drag handle on the log's left edge to resize the panel */
+.log-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 5;
+}
+.log-resizer:hover,
+.log-resizer:active {
+  background: var(--accent-border);
 }
 .log-header {
   display: flex;

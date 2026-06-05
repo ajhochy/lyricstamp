@@ -63,6 +63,8 @@ export function App() {
   // localStorage so work survives app restarts. The app starts empty — paste
   // ChordPro and click "Reload song" to load a song.
   const [tab, setTab] = usePersistentState<'lyrics' | 'leadsheet'>('tab', 'lyrics');
+  // Width (px) of the stamp-log side panel — user-resizable, persisted.
+  const [logWidth, setLogWidth] = usePersistentState<number>('logWidth', 360);
   const [setupOpen, setSetupOpen] = useState<boolean>(false);
   const [song, setSong] = usePersistentState<Song>('song', EMPTY_SONG);
   const [songName, setSongName] = usePersistentState<string>('songName', '');
@@ -483,7 +485,7 @@ export function App() {
       // (lyrics + leadsheet) when the user has stamped lyrics in this session.
       const lyricStamps = stamps.map((s) => ({
         ts: s.ts,
-        text: song.lines[s.idx]?.text ?? '',
+        text: s.text ?? song.lines[s.idx]?.text ?? '',
       }));
 
       // Name the Lyrics subfolder after the loaded PDF (sans extension), matching
@@ -526,7 +528,10 @@ export function App() {
       a.click();
       URL.revokeObjectURL(url);
 
-      pushToast(`Exported ${downloadName}`, `${leadsheetStamps.length} stamps`);
+      pushToast(
+        `Exported ${downloadName}`,
+        `${leadsheetStamps.length} page · ${lyricStamps.length} lyric clips`,
+      );
     } catch {
       pushToast('Export failed: backend unreachable');
     } finally {
@@ -835,6 +840,8 @@ export function App() {
             onSeek={seekToStamp}
             onEditText={editStampText}
             formatPos={formatPos}
+            logWidth={logWidth}
+            onResizeLog={setLogWidth}
             logScrollRef={logScrollRef}
             tweaks={tweaks}
           />
@@ -848,6 +855,8 @@ export function App() {
             onStampPage={stampLeadsheetPage}
             onRemove={removeLeadsheetStamp}
             formatPos={formatPos}
+            logWidth={logWidth}
+            onResizeLog={setLogWidth}
             tweaks={tweaks}
             pdfFile={pdfFile}
             onPdfChange={(file) => {

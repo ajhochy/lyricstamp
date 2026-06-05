@@ -34,6 +34,45 @@ type StampRowEntry = {
 
 export type StampRow = StampRowSection | StampRowEntry;
 
+// Min/max width (px) for the resizable stamp-log panel.
+const LOG_MIN_W = 240;
+const LOG_MAX_W = 720;
+
+/**
+ * Draggable divider on the left edge of the stamp-log panel. Reports the new
+ * width via onResize. Width grows as the handle is dragged left.
+ */
+const LogResizer: React.FC<{ width: number; onResize: (w: number) => void }> = ({ width, onResize }) => {
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.min(LOG_MAX_W, Math.max(LOG_MIN_W, startWidth + (startX - ev.clientX)));
+      onResize(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+  return (
+    <div
+      className="log-resizer"
+      onMouseDown={onMouseDown}
+      role="separator"
+      aria-orientation="vertical"
+      title="Drag to resize the stamp log"
+    />
+  );
+};
+
 // ---------------------------------------------------------------------------
 // LyricsView
 // ---------------------------------------------------------------------------
@@ -59,6 +98,8 @@ export interface LyricsViewProps {
   onSeek: (i: number) => void;
   onEditText: (i: number, text: string) => void;
   formatPos: (beats: number) => string;
+  logWidth: number;
+  onResizeLog: (w: number) => void;
   logScrollRef: React.RefObject<HTMLDivElement>;
   tweaks: Tweaks;
 }
@@ -70,6 +111,7 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
     currentLine, currentSection, prevLine, nextLine,
     lineIndex, lineTotal,
     stampRows, stampsCount, onUndo, onSeek, onEditText, formatPos,
+    logWidth, onResizeLog,
     logScrollRef, tweaks,
   } = props;
 
@@ -155,7 +197,10 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
       </section>
 
       {/* WORKSPACE */}
-      <div className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}>
+      <div
+        className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}
+        style={{ gridTemplateColumns: `1fr ${logWidth}px` }}
+      >
         {/* Lyric viewer */}
         <div className="viewer">
           {tweaks.showSectionHeaders && currentSection && (
@@ -186,6 +231,7 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
 
         {/* Stamp log */}
         <aside className="log">
+          <LogResizer width={logWidth} onResize={onResizeLog} />
           <div className="log-header">
             <span className="title">Stamp Log</span>
             <span className="count">{stampsCount} entries</span>
@@ -289,6 +335,8 @@ export interface LeadsheetViewProps {
   onStampPage: () => void;
   onRemove: (i: number) => void;
   formatPos: (beats: number) => string;
+  logWidth: number;
+  onResizeLog: (w: number) => void;
   tweaks: Tweaks;
   pdfFile: File | null;
   onPdfChange: (file: File) => void;
@@ -304,6 +352,8 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
   onStampPage,
   onRemove,
   formatPos,
+  logWidth,
+  onResizeLog,
   tweaks,
   pdfFile,
   onPdfChange,
@@ -371,7 +421,10 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
         </div>
       </section>
 
-      <div className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}>
+      <div
+        className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}
+        style={{ gridTemplateColumns: `1fr ${logWidth}px` }}
+      >
         <div className="viewer">
           <div className="leadsheet-stage">
             <div className="pdf-frame">
@@ -438,6 +491,7 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
         </div>
 
         <aside className="log">
+          <LogResizer width={logWidth} onResize={onResizeLog} />
           <div className="log-header">
             <span className="title">Stamp Log</span>
             <span className="count">{stamps.length} entries</span>
