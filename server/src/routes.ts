@@ -294,7 +294,7 @@ async function handlePostExportZip(
     return;
   }
 
-  const { song, stamps, lyricStamps, leadsheetName } = body as Record<string, unknown>;
+  const { song, stamps, lyricStamps, leadsheetName, timeSig } = body as Record<string, unknown>;
 
   if (song === undefined || song === null) {
     json(res, 400, { error: 'Missing required field: song' });
@@ -431,8 +431,11 @@ async function handlePostExportZip(
   }
 
   // Ableton project folder, e.g. "Great Things - E - 4:4 - 68 BPM Project".
-  // Time signature isn't captured by the app yet, so it defaults to 4:4.
-  const projectFolder = safeFolderName(`${songObj.name} - 4:4 - ${Math.round(songObj.bpm)} BPM Project`);
+  // Time signature comes from the live Ableton meter (defaults to 4:4).
+  const sig = (typeof timeSig === 'object' && timeSig !== null) ? timeSig as Record<string, unknown> : {};
+  const sigNum = typeof sig.num === 'number' && sig.num > 0 ? Math.round(sig.num) : 4;
+  const sigDen = typeof sig.den === 'number' && sig.den > 0 ? Math.round(sig.den) : 4;
+  const projectFolder = safeFolderName(`${songObj.name} - ${sigNum}:${sigDen} - ${Math.round(songObj.bpm)} BPM Project`);
   const alsFilename = `${safeFolderName(songObj.name)}.als`;
 
   let zipBuffer: Buffer;

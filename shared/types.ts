@@ -24,7 +24,7 @@ export type Song = {
 };
 
 export type LiveMsg =
-  | { type: 'tick'; ts: number; bpm: number; playing: boolean }
+  | { type: 'tick'; ts: number; bpm: number; playing: boolean; numerator: number; denominator: number }
   | { type: 'connection'; connected: boolean }
   | { type: 'song'; bpm: number; tempo: number; signature: string };
 

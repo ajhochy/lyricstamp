@@ -20,4 +20,10 @@ export type InitialStamp = {
   idx: number;
   ts: number;
   sectionStart?: string;
+  /**
+   * Optional per-stamp lyric override. When set, it is shown in the stamp log
+   * and used as the clip name on export, instead of the parsed song line text.
+   * Lets the user correct a single stamp's lyric without re-parsing the song.
+   */
+  text?: string;
 };

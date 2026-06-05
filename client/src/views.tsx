@@ -1,6 +1,6 @@
 // views.tsx — LyricsView, LeadsheetView, TweaksUI
 // Ported from design/views.jsx. Class names and markup kept identical.
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Icon } from './icons';
 import {
   TweaksPanel,
@@ -9,7 +9,6 @@ import {
   TweakSelect,
   TweakToggle,
 } from './tweaks-panel';
-import { fmt } from './format';
 import { type PdfRenderer } from './use-pdf';
 import { type Tweaks } from './use-tweaks';
 
@@ -58,6 +57,8 @@ export interface LyricsViewProps {
   stampsCount: number;
   onUndo: (i: number) => void;
   onSeek: (i: number) => void;
+  onEditText: (i: number, text: string) => void;
+  formatPos: (beats: number) => string;
   logScrollRef: React.RefObject<HTMLDivElement>;
   tweaks: Tweaks;
 }
@@ -68,11 +69,39 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
     setupOpen, setSetupOpen,
     currentLine, currentSection, prevLine, nextLine,
     lineIndex, lineTotal,
-    stampRows, stampsCount, onUndo, onSeek,
+    stampRows, stampsCount, onUndo, onSeek, onEditText, formatPos,
     logScrollRef, tweaks,
   } = props;
 
   const progressPct = Math.round((lineIndex / Math.max(1, lineTotal)) * 100);
+
+  // Inline lyric editing: which stamp row is being edited + its draft text.
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Reliably focus + select the edit input when entering edit mode. autoFocus
+  // is unreliable here because the constant OSC-tick re-renders can swap the
+  // input in without it taking focus, so keystrokes would be lost.
+  useEffect(() => {
+    if (editingIdx !== null) {
+      const el = editInputRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }
+  }, [editingIdx]);
+
+  const beginEdit = (i: number, text: string) => {
+    setEditValue(text === '—' ? '' : text);
+    setEditingIdx(i);
+  };
+  const commitEdit = () => {
+    if (editingIdx !== null) onEditText(editingIdx, editValue);
+    setEditingIdx(null);
+  };
+  const cancelEdit = () => setEditingIdx(null);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -166,24 +195,56 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
               if (r.kind === 'section') {
                 return <div className="log-row section" key={r.key}>{r.label}</div>;
               }
+              const editing = editingIdx === r.i;
               return (
                 <div
                   className={`log-row clickable${r.recent ? ' recent' : ''}${r.flash ? ' flash' : ''}`}
                   key={r.i}
-                  onClick={() => onSeek(r.i)}
-                  title="Jump playhead to this stamp"
+                  onClick={() => { if (!editing) onSeek(r.i); }}
+                  title="Click to jump playhead · double-click lyric to edit"
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
+                    if (editing) return;
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       onSeek(r.i);
                     }
                   }}
                 >
-                  <span className="ts">{fmt(r.ts)}</span>
+                  <span className="ts">{formatPos(r.ts)}</span>
                   <span className="idx">#{String(r.i + 1).padStart(2, '0')}</span>
-                  <span className="text" title={r.text}>{r.text}</span>
+                  {editing ? (
+                    <input
+                      ref={editInputRef}
+                      className="log-edit"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitEdit();
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          cancelEdit();
+                        }
+                      }}
+                      onBlur={commitEdit}
+                    />
+                  ) : (
+                    <span
+                      className="text"
+                      title="Double-click to edit lyric"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        beginEdit(r.i, r.text);
+                      }}
+                    >
+                      {r.text}
+                    </span>
+                  )}
                   <button
                     className="undo"
                     onClick={(e) => { e.stopPropagation(); onUndo(r.i); }}
@@ -227,6 +288,7 @@ export interface LeadsheetViewProps {
   stamps: LeadsheetStamp[];
   onStampPage: () => void;
   onRemove: (i: number) => void;
+  formatPos: (beats: number) => string;
   tweaks: Tweaks;
   pdfFile: File | null;
   onPdfChange: (file: File) => void;
@@ -241,6 +303,7 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
   stamps,
   onStampPage,
   onRemove,
+  formatPos,
   tweaks,
   pdfFile,
   onPdfChange,
@@ -385,7 +448,7 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
                 className={`log-row${i === stamps.length - 1 ? ' recent' : ''}`}
                 key={i}
               >
-                <span className="ts">{fmt(s.ts)}</span>
+                <span className="ts">{formatPos(s.ts)}</span>
                 <span className="idx">p{s.page}</span>
                 <span className="text" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                   [img:page{s.page}.png] · {s.region}

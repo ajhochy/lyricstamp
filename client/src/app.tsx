@@ -7,7 +7,7 @@ import {
   useMemo,
 } from 'react';
 import { Icon } from './icons';
-import { fmt } from './format';
+import { fmtBeats } from './format';
 import { EMPTY_SONG, type InitialStamp } from './data';
 import { usePdf } from './use-pdf';
 import { LyricsView, LeadsheetView, TweaksUI, type StampRow, type LeadsheetStamp } from './views';
@@ -71,7 +71,13 @@ export function App() {
 
   // Playback — driven by WebSocket (#17) and controlled via WebSocket (#18)
   const { state: liveState, sendCommand } = useLive();
-  const { ts: time, bpm: liveBpm, playing: liveConnectedPlaying, connected } = liveState;
+  const { ts: time, bpm: liveBpm, playing: liveConnectedPlaying, connected, numerator, denominator } = liveState;
+
+  // Format a beat position as Bar.Beat.Sixteenth using the live time signature.
+  const formatPos = useCallback(
+    (beats: number) => fmtBeats(beats, numerator, denominator),
+    [numerator, denominator],
+  );
   // Optimistic local play state for the pill and hint bar.
   // Flips immediately on Space; the next tick (~100 ms) will confirm or correct.
   const [playing, setPlaying] = useState<boolean>(false);
@@ -340,6 +346,14 @@ export function App() {
     setStamps((arr) => arr.filter((_, j) => j !== i));
   }, [setStamps]);
 
+  // Edit a single stamp's lyric text (override). Empty text clears the override
+  // so the row falls back to the parsed song line.
+  const editStampText = useCallback((i: number, text: string) => {
+    setStamps((arr) =>
+      arr.map((s, j) => (j === i ? { ...s, text: text.trim() === '' ? undefined : text } : s)),
+    );
+  }, [setStamps]);
+
   // onReload — POST /api/song with current songName + pasteText, replace song state.
   const onReload = useCallback(async () => {
     setReloading(true);
@@ -394,7 +408,7 @@ export function App() {
       stamps: stamps.map((s, i) => ({
         id: `stamp-${i}-${s.ts}`,
         lineIdx: s.idx,
-        lineText: song.lines[s.idx]?.text ?? '',
+        lineText: s.text ?? song.lines[s.idx]?.text ?? '',
         section: s.sectionStart ?? null,
         ts: s.ts,
         beats: 0,
@@ -479,7 +493,13 @@ export function App() {
       const res = await fetch('/api/export/zip', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ song, stamps: sheetStamps, lyricStamps, leadsheetName }),
+        body: JSON.stringify({
+          song,
+          stamps: sheetStamps,
+          lyricStamps,
+          leadsheetName,
+          timeSig: { num: numerator, den: denominator },
+        }),
       });
 
       if (!res.ok) {
@@ -512,7 +532,7 @@ export function App() {
     } finally {
       setExportingLeadsheet(false);
     }
-  }, [pdfFile, leadsheetStamps, pageRenderer, song, stamps, pushToast]);
+  }, [pdfFile, leadsheetStamps, pageRenderer, song, stamps, numerator, denominator, pushToast]);
 
   const exportFile = useCallback(() => {
     if (tab === 'lyrics') {
@@ -628,7 +648,7 @@ export function App() {
         kind: 'row',
         i,
         ts: s.ts,
-        text: lineObj?.text ?? '—',
+        text: s.text ?? lineObj?.text ?? '—',
         recent: i === stamps.length - 1,
         flash: flashIdx === i,
       });
@@ -686,9 +706,8 @@ export function App() {
               <Icon name="stop" size={12} />
             </button>
           </div>
-          <span className="time">
-            {fmt(time).split('.')[0]}
-            <span className="ms">.{fmt(time).split('.')[1]}</span>
+          <span className="time" title="Bar.Beat.Sixteenth">
+            {formatPos(time)}
           </span>
           <span className="bpm">
             <span className="val">{liveBpm}</span>
@@ -814,6 +833,8 @@ export function App() {
             stampsCount={stamps.length}
             onUndo={undoStamp}
             onSeek={seekToStamp}
+            onEditText={editStampText}
+            formatPos={formatPos}
             logScrollRef={logScrollRef}
             tweaks={tweaks}
           />
@@ -826,6 +847,7 @@ export function App() {
             stamps={leadsheetStamps}
             onStampPage={stampLeadsheetPage}
             onRemove={removeLeadsheetStamp}
+            formatPos={formatPos}
             tweaks={tweaks}
             pdfFile={pdfFile}
             onPdfChange={(file) => {

@@ -10,6 +10,8 @@ export type LiveState = {
   ts: number;
   bpm: number;
   playing: boolean;
+  numerator: number;
+  denominator: number;
   connected: boolean; // true only when WS is alive AND Ableton OSC handshake succeeded
 };
 
@@ -22,6 +24,8 @@ const INITIAL_STATE: LiveState = {
   ts: 0,
   bpm: 120,
   playing: false,
+  numerator: 4,
+  denominator: 4,
   connected: false,
 };
 
@@ -74,6 +78,8 @@ export function useLive(): UseLiveReturn {
             ts: msg.ts,
             bpm: msg.bpm,
             playing: msg.playing,
+            numerator: msg.numerator,
+            denominator: msg.denominator,
           }));
         } else if (msg.type === 'connection') {
           setState((prev) => ({ ...prev, connected: msg.connected }));

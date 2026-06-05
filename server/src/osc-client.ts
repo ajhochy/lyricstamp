@@ -5,6 +5,8 @@ export interface TickPayload {
   ts: number;
   bpm: number;
   playing: boolean;
+  numerator: number;
+  denominator: number;
 }
 
 export interface ConnectionPayload {
@@ -22,6 +24,8 @@ const HEARTBEAT_TIMEOUT_MS = 2000; // 2 s
 const ADDR_SONG_TIME = '/live/song/get/current_song_time';
 const ADDR_TEMPO = '/live/song/get/tempo';
 const ADDR_IS_PLAYING = '/live/song/get/is_playing';
+const ADDR_SIG_NUM = '/live/song/get/signature_numerator';
+const ADDR_SIG_DEN = '/live/song/get/signature_denominator';
 const ADDR_TEST = '/live/test';
 const ADDR_START_PLAYING = '/live/song/start_playing';
 const ADDR_STOP_PLAYING = '/live/song/stop_playing';
@@ -43,6 +47,9 @@ export class OscClient extends EventEmitter<OscClientEvents> {
   private _lastTs: number | null = null;
   private _lastBpm: number | null = null;
   private _lastPlaying: boolean | null = null;
+  // Time signature defaults to 4/4 until Ableton reports otherwise.
+  private _lastNum = 4;
+  private _lastDen = 4;
 
   private _lastHeartbeatReplyAt = 0;
   private _connected = false;
@@ -194,6 +201,8 @@ export class OscClient extends EventEmitter<OscClientEvents> {
     this._send(ADDR_SONG_TIME);
     this._send(ADDR_TEMPO);
     this._send(ADDR_IS_PLAYING);
+    this._send(ADDR_SIG_NUM);
+    this._send(ADDR_SIG_DEN);
   }
 
   private _heartbeat(): void {
@@ -239,6 +248,12 @@ export class OscClient extends EventEmitter<OscClientEvents> {
         } else if (typeof val === 'boolean') {
           this._lastPlaying = val;
         }
+      } else if (address === ADDR_SIG_NUM) {
+        const val = msg[1];
+        if (typeof val === 'number' && val > 0) this._lastNum = val;
+      } else if (address === ADDR_SIG_DEN) {
+        const val = msg[1];
+        if (typeof val === 'number' && val > 0) this._lastDen = val;
       }
 
       // Emit tick once all three values have been received at least once
@@ -251,6 +266,8 @@ export class OscClient extends EventEmitter<OscClientEvents> {
           ts: this._lastTs,
           bpm: this._lastBpm,
           playing: this._lastPlaying,
+          numerator: this._lastNum,
+          denominator: this._lastDen,
         };
         this.emit('tick', payload);
       }
