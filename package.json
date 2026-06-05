@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Local macOS tool for worship music directors to sync lyrics/leadsheets with Ableton Live",
   "type": "module",
+  "main": "out/main/main.js",
   "scripts": {
     "dev": "concurrently -k -n client,server -c blue,green \"npm:dev:client\" \"npm:dev:server\"",
     "dev:client": "vite --config client/vite.config.ts",
@@ -13,9 +14,47 @@
     "typecheck": "tsc -p client/tsconfig.json --noEmit && tsc -p server/tsconfig.json --noEmit",
     "lint": "eslint . --ext .ts,.tsx",
     "test": "vitest run --passWithNoTests",
+    "test:e2e": "npx playwright test --config=playwright.config.ts",
+    "test:e2e:dev": "npx playwright test --config=playwright.dev.config.ts",
+    "test:e2e:app": "node scripts/e2e-app.mjs",
+    "test:e2e:build": "npm run electron:dist && npm run test:e2e:app",
     "generate-template": "tsx scripts/generate-template.ts",
     "copy:pdf-worker": "cp node_modules/pdfjs-dist/build/pdf.worker.min.mjs client/public/pdf.worker.min.js",
-    "postinstall": "npm run copy:pdf-worker"
+    "postinstall": "npm run copy:pdf-worker",
+    "electron:dev": "electron-vite dev",
+    "electron:build": "electron-vite build",
+    "electron:dist": "npm run electron:build && electron-builder"
+  },
+  "build": {
+    "appId": "com.ableset-lyrics-sync",
+    "productName": "AbleSet Sync",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "templates/**/*"
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.plist",
+      "entitlementsInherit": "entitlements.plist",
+      "sign": "scripts/sign.cjs",
+      "target": [
+        {
+          "target": "dmg"
+        },
+        {
+          "target": "zip"
+        }
+      ],
+      "category": "public.app-category.music"
+    },
+    "dmg": {
+      "sign": false
+    }
   },
   "dependencies": {
     "@types/archiver": "^7.0.0",
@@ -30,6 +69,7 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
@@ -38,6 +78,9 @@
     "@typescript-eslint/parser": "^8.18.0",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
+    "electron": "^42.3.2",
+    "electron-builder": "^26.8.1",
+    "electron-vite": "^5.0.0",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.3",
     "eslint-plugin-react-hooks": "^4.6.2",

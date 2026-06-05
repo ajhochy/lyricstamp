@@ -5,6 +5,8 @@ export interface TickPayload {
   ts: number;
   bpm: number;
   playing: boolean;
+  numerator: number;
+  denominator: number;
 }
 
 export interface ConnectionPayload {
@@ -22,9 +24,13 @@ const HEARTBEAT_TIMEOUT_MS = 2000; // 2 s
 const ADDR_SONG_TIME = '/live/song/get/current_song_time';
 const ADDR_TEMPO = '/live/song/get/tempo';
 const ADDR_IS_PLAYING = '/live/song/get/is_playing';
+const ADDR_SIG_NUM = '/live/song/get/signature_numerator';
+const ADDR_SIG_DEN = '/live/song/get/signature_denominator';
 const ADDR_TEST = '/live/test';
 const ADDR_START_PLAYING = '/live/song/start_playing';
 const ADDR_STOP_PLAYING = '/live/song/stop_playing';
+const ADDR_CONTINUE_PLAYING = '/live/song/continue_playing';
+const ADDR_SET_SONG_TIME = '/live/song/set/current_song_time';
 
 type OscClientEvents = {
   tick: [TickPayload];
@@ -41,6 +47,9 @@ export class OscClient extends EventEmitter<OscClientEvents> {
   private _lastTs: number | null = null;
   private _lastBpm: number | null = null;
   private _lastPlaying: boolean | null = null;
+  // Time signature defaults to 4/4 until Ableton reports otherwise.
+  private _lastNum = 4;
+  private _lastDen = 4;
 
   private _lastHeartbeatReplyAt = 0;
   private _connected = false;
@@ -121,6 +130,62 @@ export class OscClient extends EventEmitter<OscClientEvents> {
     this._send(ADDR_STOP_PLAYING);
   }
 
+  /**
+   * Pause in place: stop_playing leaves the Live playhead where it is — it does
+   * NOT rewind to the start (only start_playing rewinds, which is why resume
+   * uses continue_playing below).
+   *
+   * We deliberately do NOT pin the position with set/current_song_time here.
+   * Pinning froze Live's continue-point at the pause position, which made it
+   * impossible to return to zero from Ableton (the Stop button / dragging the
+   * playhead). Leaving current_song_time untouched lets Ableton drive resets:
+   * after an Ableton Stop, continue_playing resumes from wherever Live now is.
+   */
+  pausePlaying(): void {
+    this._send(ADDR_STOP_PLAYING);
+  }
+
+  /**
+   * Resume from Live's current position using continue_playing, which does not
+   * rewind to the start the way start_playing does.
+   */
+  continuePlaying(): void {
+    this._send(ADDR_CONTINUE_PLAYING);
+  }
+
+  /**
+   * Stop and return the playhead to the start (beat 0).
+   *
+   * We set current_song_time explicitly rather than relying on Ableton's Stop
+   * button: continue_playing resumes from current_song_time, and that value
+   * does not always track the visible playhead when repositioned manually.
+   * Setting it here guarantees the next play starts from 0.
+   */
+  returnToStart(): void {
+    this._send(ADDR_STOP_PLAYING);
+    this._sendWithValue(ADDR_SET_SONG_TIME, 0);
+  }
+
+  /**
+   * Move the playhead to a specific position (in beats) without starting or
+   * stopping playback. If Live is playing, it jumps and keeps playing; if
+   * stopped, the next continue_playing resumes from here.
+   */
+  seek(beats: number): void {
+    this._sendWithValue(ADDR_SET_SONG_TIME, Math.max(0, beats));
+  }
+
+  private _sendWithValue(address: string, value: number): void {
+    if (this._oscClient === null) {
+      return;
+    }
+    this._oscClient.send(address, value, (err?: Error) => {
+      if (err) {
+        console.error(`[OSC] Send error for ${address}:`, err.message);
+      }
+    });
+  }
+
   private _send(address: string): void {
     if (this._oscClient === null) {
       return;
@@ -136,6 +201,8 @@ export class OscClient extends EventEmitter<OscClientEvents> {
     this._send(ADDR_SONG_TIME);
     this._send(ADDR_TEMPO);
     this._send(ADDR_IS_PLAYING);
+    this._send(ADDR_SIG_NUM);
+    this._send(ADDR_SIG_DEN);
   }
 
   private _heartbeat(): void {
@@ -181,6 +248,12 @@ export class OscClient extends EventEmitter<OscClientEvents> {
         } else if (typeof val === 'boolean') {
           this._lastPlaying = val;
         }
+      } else if (address === ADDR_SIG_NUM) {
+        const val = msg[1];
+        if (typeof val === 'number' && val > 0) this._lastNum = val;
+      } else if (address === ADDR_SIG_DEN) {
+        const val = msg[1];
+        if (typeof val === 'number' && val > 0) this._lastDen = val;
       }
 
       // Emit tick once all three values have been received at least once
@@ -193,6 +266,8 @@ export class OscClient extends EventEmitter<OscClientEvents> {
           ts: this._lastTs,
           bpm: this._lastBpm,
           playing: this._lastPlaying,
+          numerator: this._lastNum,
+          denominator: this._lastDen,
         };
         this.emit('tick', payload);
       }

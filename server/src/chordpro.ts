@@ -2,7 +2,7 @@
 // imports are not available via Node's module resolution. Import the default
 // and destructure from it.
 import chordsheetjs from 'chordsheetjs';
-const { ChordProParser, ChordLyricsPair, Tag } = chordsheetjs as typeof import('chordsheetjs');
+const { ChordProParser, ChordLyricsPair } = chordsheetjs as typeof import('chordsheetjs');
 import type { Song } from '../../shared/types.js';
 
 /**
@@ -53,16 +53,12 @@ export function parseChordPro(name: string, chordpro: string): Song {
     for (const line of paragraph.lines) {
       if (line.isEmpty()) continue;
 
-      // Collect lyrics text from ChordLyricsPair items (strip chords, keep text)
       let text = '';
       for (const item of line.items) {
         if (item instanceof ChordLyricsPair) {
-          text += item.lyrics ?? '';
-        } else if (item instanceof Tag) {
-          // Inline tags (e.g. comments) are skipped; section delimiters are
-          // already handled at the paragraph level.
+          const chordBracket = item.chords ? `[${item.chords}]` : '';
+          text += chordBracket + (item.lyrics ?? '');
         }
-        // Comment and other items are skipped
       }
 
       text = text.trim();

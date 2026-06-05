@@ -1,6 +1,6 @@
 // views.tsx — LyricsView, LeadsheetView, TweaksUI
 // Ported from design/views.jsx. Class names and markup kept identical.
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { Icon } from './icons';
 import {
   TweaksPanel,
@@ -9,7 +9,6 @@ import {
   TweakSelect,
   TweakToggle,
 } from './tweaks-panel';
-import { fmt } from './format';
 import { type PdfRenderer } from './use-pdf';
 import { type Tweaks } from './use-tweaks';
 
@@ -35,6 +34,45 @@ type StampRowEntry = {
 
 export type StampRow = StampRowSection | StampRowEntry;
 
+// Min/max width (px) for the resizable stamp-log panel.
+const LOG_MIN_W = 240;
+const LOG_MAX_W = 720;
+
+/**
+ * Draggable divider on the left edge of the stamp-log panel. Reports the new
+ * width via onResize. Width grows as the handle is dragged left.
+ */
+const LogResizer: React.FC<{ width: number; onResize: (w: number) => void }> = ({ width, onResize }) => {
+  const onMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = width;
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.min(LOG_MAX_W, Math.max(LOG_MIN_W, startWidth + (startX - ev.clientX)));
+      onResize(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+  return (
+    <div
+      className="log-resizer"
+      onMouseDown={onMouseDown}
+      role="separator"
+      aria-orientation="vertical"
+      title="Drag to resize the stamp log"
+    />
+  );
+};
+
 // ---------------------------------------------------------------------------
 // LyricsView
 // ---------------------------------------------------------------------------
@@ -50,12 +88,18 @@ export interface LyricsViewProps {
   setSetupOpen: (open: boolean) => void;
   currentLine: string | undefined;
   currentSection: string | null | undefined;
+  prevLine: string | null | undefined;
   nextLine: string | null | undefined;
   lineIndex: number;
   lineTotal: number;
   stampRows: StampRow[];
   stampsCount: number;
   onUndo: (i: number) => void;
+  onSeek: (i: number) => void;
+  onEditText: (i: number, text: string) => void;
+  formatPos: (beats: number) => string;
+  logWidth: number;
+  onResizeLog: (w: number) => void;
   logScrollRef: React.RefObject<HTMLDivElement>;
   tweaks: Tweaks;
 }
@@ -64,13 +108,42 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
   const {
     songName, setSongName, pasteText, setPasteText, onReload, reloading, lineCount,
     setupOpen, setSetupOpen,
-    currentLine, currentSection, nextLine,
+    currentLine, currentSection, prevLine, nextLine,
     lineIndex, lineTotal,
-    stampRows, stampsCount, onUndo,
+    stampRows, stampsCount, onUndo, onSeek, onEditText, formatPos,
+    logWidth, onResizeLog,
     logScrollRef, tweaks,
   } = props;
 
   const progressPct = Math.round((lineIndex / Math.max(1, lineTotal)) * 100);
+
+  // Inline lyric editing: which stamp row is being edited + its draft text.
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // Reliably focus + select the edit input when entering edit mode. autoFocus
+  // is unreliable here because the constant OSC-tick re-renders can swap the
+  // input in without it taking focus, so keystrokes would be lost.
+  useEffect(() => {
+    if (editingIdx !== null) {
+      const el = editInputRef.current;
+      if (el) {
+        el.focus();
+        el.select();
+      }
+    }
+  }, [editingIdx]);
+
+  const beginEdit = (i: number, text: string) => {
+    setEditValue(text === '—' ? '' : text);
+    setEditingIdx(i);
+  };
+  const commitEdit = () => {
+    if (editingIdx !== null) onEditText(editingIdx, editValue);
+    setEditingIdx(null);
+  };
+  const cancelEdit = () => setEditingIdx(null);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
@@ -124,13 +197,23 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
       </section>
 
       {/* WORKSPACE */}
-      <div className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}>
+      <div
+        className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}
+        style={{ gridTemplateColumns: `1fr ${logWidth}px` }}
+      >
         {/* Lyric viewer */}
         <div className="viewer">
           {tweaks.showSectionHeaders && currentSection && (
             <div className="section-eyebrow">{currentSection}</div>
           )}
-          <div className="lyric-current entering" key={currentLine}>
+          {prevLine && (
+            <>
+              <div className="lyric-now-label">Now playing</div>
+              <div className="lyric-prev">{prevLine}</div>
+            </>
+          )}
+          <div className="stamp-target-label">Next to stamp &rarr;</div>
+          <div className="lyric-current next-up" key={currentLine}>
             {currentLine || '—'}
           </div>
           {nextLine && (
@@ -148,6 +231,7 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
 
         {/* Stamp log */}
         <aside className="log">
+          <LogResizer width={logWidth} onResize={onResizeLog} />
           <div className="log-header">
             <span className="title">Stamp Log</span>
             <span className="count">{stampsCount} entries</span>
@@ -157,15 +241,61 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
               if (r.kind === 'section') {
                 return <div className="log-row section" key={r.key}>{r.label}</div>;
               }
+              const editing = editingIdx === r.i;
               return (
                 <div
-                  className={`log-row${r.recent ? ' recent' : ''}${r.flash ? ' flash' : ''}`}
+                  className={`log-row clickable${r.recent ? ' recent' : ''}${r.flash ? ' flash' : ''}`}
                   key={r.i}
+                  onClick={() => { if (!editing) onSeek(r.i); }}
+                  title="Click to jump playhead · double-click lyric to edit"
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (editing) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onSeek(r.i);
+                    }
+                  }}
                 >
-                  <span className="ts">{fmt(r.ts)}</span>
+                  <span className="ts">{formatPos(r.ts)}</span>
                   <span className="idx">#{String(r.i + 1).padStart(2, '0')}</span>
-                  <span className="text" title={r.text}>{r.text}</span>
-                  <button className="undo" onClick={() => onUndo(r.i)} title="Undo stamp">
+                  {editing ? (
+                    <input
+                      ref={editInputRef}
+                      className="log-edit"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          commitEdit();
+                        } else if (e.key === 'Escape') {
+                          e.preventDefault();
+                          cancelEdit();
+                        }
+                      }}
+                      onBlur={commitEdit}
+                    />
+                  ) : (
+                    <span
+                      className="text"
+                      title="Double-click to edit lyric"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        beginEdit(r.i, r.text);
+                      }}
+                    >
+                      {r.text}
+                    </span>
+                  )}
+                  <button
+                    className="undo"
+                    onClick={(e) => { e.stopPropagation(); onUndo(r.i); }}
+                    title="Undo stamp"
+                  >
                     <Icon name="undo" size={11} />
                   </button>
                 </div>
@@ -202,6 +332,11 @@ export interface LeadsheetViewProps {
   page: number;
   setPage: (page: number) => void;
   stamps: LeadsheetStamp[];
+  onStampPage: () => void;
+  onRemove: (i: number) => void;
+  formatPos: (beats: number) => string;
+  logWidth: number;
+  onResizeLog: (w: number) => void;
   tweaks: Tweaks;
   pdfFile: File | null;
   onPdfChange: (file: File) => void;
@@ -214,6 +349,11 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
   page,
   setPage,
   stamps,
+  onStampPage,
+  onRemove,
+  formatPos,
+  logWidth,
+  onResizeLog,
   tweaks,
   pdfFile,
   onPdfChange,
@@ -281,7 +421,10 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
         </div>
       </section>
 
-      <div className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}>
+      <div
+        className={`workspace${tweaks.logDensity === 'spacious' ? ' spacious-log' : ''}`}
+        style={{ gridTemplateColumns: `1fr ${logWidth}px` }}
+      >
         <div className="viewer">
           <div className="leadsheet-stage">
             <div className="pdf-frame">
@@ -334,11 +477,21 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
               >
                 <Icon name="chevron-right" size={14} />
               </button>
+              <button
+                className="btn primary"
+                onClick={onStampPage}
+                disabled={!pdfFile}
+                title="Stamp this page at the current playback time"
+                style={{ marginLeft: 10 }}
+              >
+                <Icon name="check" size={12} /> Stamp page
+              </button>
             </div>
           </div>
         </div>
 
         <aside className="log">
+          <LogResizer width={logWidth} onResize={onResizeLog} />
           <div className="log-header">
             <span className="title">Stamp Log</span>
             <span className="count">{stamps.length} entries</span>
@@ -349,12 +502,12 @@ export const LeadsheetView: React.FC<LeadsheetViewProps> = ({
                 className={`log-row${i === stamps.length - 1 ? ' recent' : ''}`}
                 key={i}
               >
-                <span className="ts">{fmt(s.ts)}</span>
+                <span className="ts">{formatPos(s.ts)}</span>
                 <span className="idx">p{s.page}</span>
                 <span className="text" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
                   [img:page{s.page}.png] · {s.region}
                 </span>
-                <button className="undo" title="Undo stamp">
+                <button className="undo" onClick={() => onRemove(i)} title="Remove stamp">
                   <Icon name="undo" size={11} />
                 </button>
               </div>

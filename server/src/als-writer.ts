@@ -1,10 +1,10 @@
 /**
  * als-writer.ts
  *
- * Builds a gzipped Ableton Live 11 .als file by injecting MidiClip elements
+ * Builds a gzipped Ableton Live 12 .als file by injecting MidiClip elements
  * into the blank-stamp-track.als template.
  *
- * Reference MidiClip XML structure (Ableton Live 11 / SchemaVersion 3):
+ * Reference MidiClip XML structure (Ableton Live 12 / SchemaVersion 3):
  * -----------------------------------------------------------------------
  * <MidiClip Id="0" Time="{beats}">
  *   <LomId Value="0" />
@@ -105,71 +105,137 @@
 
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
-const TEMPLATE_PATH = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../templates/blank-stamp-track.als',
-);
+// Resolve the template path lazily at call time, not at module-init time.
+// In the packaged Electron app, process.cwd() is '/' and ELECTRON_APP_ROOT
+// is set by electron/main.ts inside app.whenReady() — which fires AFTER the
+// module graph is imported. A module-level constant would always see the
+// unset value. Calling this function at export-time gets the correct value.
+function getTemplatePath(): string {
+  return resolve(
+    process.env.ELECTRON_APP_ROOT ?? process.cwd(),
+    'templates/blank-stamp-track.als',
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 export type AlsStampInput = {
-  ts: number; // seconds
+  ts: number; // beats — AbletonOSC /live/song/get/current_song_time returns beats, not seconds
   clipName: string; // already-formatted name
+};
+
+// The two MIDI tracks present in blank-stamp-track.als (Live 12), in order.
+//   'chart'     → template EffectiveName "Chart +LYRICS [-2n]"   (lyric clips)
+//   'leadsheet' → template EffectiveName "leadsheet +LYRICS [-2n]" (page-image clips)
+export type AlsTemplateTrack = 'chart' | 'leadsheet';
+
+const TEMPLATE_TRACK_NAME: Record<AlsTemplateTrack, string> = {
+  chart: 'Chart +LYRICS [-2n]',
+  leadsheet: 'leadsheet +LYRICS [-2n]',
+};
+
+export type AlsTrackSpec = {
+  track: AlsTemplateTrack; // which template track to populate
+  name: string; // new EffectiveName for the track
+  stamps: AlsStampInput[]; // clips to inject (beats)
 };
 
 /**
  * Build a gzipped .als Buffer from the blank-stamp-track template.
  *
- * @param opts.bpm - Song tempo in beats per minute (used to convert ts → beats).
- * @param opts.trackName - The EffectiveName for the MIDI track.
- * @param opts.stamps - List of stamps to insert as MidiClip elements.
- * @returns A Buffer containing the gzipped .als file contents.
+ * Two call styles:
+ *   - Legacy single track: { trackName, stamps } → populates the "chart" track.
+ *   - Multi-track:         { tracks: AlsTrackSpec[] } → populates each named
+ *     template track independently (e.g. lyrics on "chart" + images on
+ *     "leadsheet"). Each track's clips are injected into THAT track's own
+ *     ArrangerAutomation/Events, scoped per MidiTrack block.
+ *
+ * `bpm` is accepted for API stability but unused — ts is already in beats.
  */
 export function writeAlsFile(opts: {
-  bpm: number;
-  trackName: string;
-  stamps: AlsStampInput[];
+  bpm?: number;
+  trackName?: string;
+  stamps?: AlsStampInput[];
+  tracks?: AlsTrackSpec[];
 }): Buffer {
-  const { bpm, trackName, stamps } = opts;
+  const specs: AlsTrackSpec[] = opts.tracks
+    ? opts.tracks
+    : [{ track: 'chart', name: opts.trackName ?? 'Chart +LYRICS [-2n]', stamps: opts.stamps ?? [] }];
 
-  // 1. Read and decompress template
-  const templateBytes = readFileSync(TEMPLATE_PATH);
+  const templateBytes = readFileSync(getTemplatePath());
   let xml = gunzipSync(templateBytes).toString('utf-8');
 
-  // 2. Rename the MIDI track's EffectiveName.
-  //    The template has exactly one EffectiveName for the MIDI track.
-  //    We replace the first occurrence (track name) leaving the others.
-  xml = xml.replace(
-    /<EffectiveName Value="Vocals \+LYRICS">/,
-    `<EffectiveName Value="${escapeXml(trackName)}">`,
+  // Split the document at the two MidiTrack boundaries so each track's clips
+  // land in its own block (the first <ArrangerAutomation>…<Events/> within the
+  // block is that track's arrangement clip container).
+  const starts = [...xml.matchAll(/<MidiTrack Id="\d+"/g)].map((m) => m.index ?? -1);
+  if (starts.length < 2) {
+    throw new Error(`Expected 2 MIDI tracks in template, found ${starts.length}`);
+  }
+  const prefix = xml.slice(0, starts[0]);
+  let chartSeg = xml.slice(starts[0], starts[1]); // track 0 = chart
+  let restSeg = xml.slice(starts[1]); // track 1 = leadsheet + document tail
+
+  // Number clip ids contiguously across tracks so no two clips share an Id.
+  let idBase = 0;
+  for (const spec of specs) {
+    if (spec.track === 'chart') {
+      chartSeg = applyTrack(chartSeg, spec, idBase);
+    } else {
+      restSeg = applyTrack(restSeg, spec, idBase);
+    }
+    idBase += spec.stamps.length;
+  }
+
+  xml = prefix + chartSeg + restSeg;
+  return gzipSync(Buffer.from(xml, 'utf-8'), { level: 9 });
+}
+
+/**
+ * Within a single MidiTrack segment, rename its EffectiveName and inject clips
+ * into its first (arrangement) Events element. Operates on the first match in
+ * the segment, which is safe because the segment contains exactly one track.
+ */
+function applyTrack(segment: string, spec: AlsTrackSpec, idBase: number): string {
+  let out = segment;
+
+  // Rename the template EffectiveName for this track (first match in segment).
+  const fromName = TEMPLATE_TRACK_NAME[spec.track];
+  out = out.replace(
+    new RegExp(`<EffectiveName Value="${escapeRegExp(fromName)}" />`),
+    `<EffectiveName Value="${escapeXml(spec.name)}" />`,
   );
 
-  // 3. Build MidiClip XML for each stamp and inject into ArrangerAutomation > Events.
-  if (stamps.length > 0) {
-    const clipXml = stamps
-      .map((stamp, idx) => buildMidiClipXml(idx, stamp.ts, bpm, stamp.clipName))
+  if (spec.stamps.length > 0) {
+    const beats = spec.stamps.map((s) => s.ts);
+    const clipXml = spec.stamps
+      .map((stamp, idx) => {
+        const start = beats[idx];
+        const end = idx < spec.stamps.length - 1 ? beats[idx + 1] : start + DEFAULT_CLIP_LENGTH;
+        return buildMidiClipXml(idBase + idx, start, end, stamp.clipName);
+      })
       .join('\n\t\t\t\t\t');
-
-    // The template has: <ArrangerAutomation>\n\t\t\t\t\t<Events></Events>
-    // Replace the empty Events element with one containing the clips.
-    xml = xml.replace(
-      /(<ArrangerAutomation>[\s\S]*?<Events>)<\/Events>/,
-      `$1\n\t\t\t\t\t\t${clipXml}\n\t\t\t\t\t\t</Events>`,
+    out = out.replace(
+      /(<ArrangerAutomation>[\s\S]*?<Events) \/>/,
+      `$1>\n\t\t\t\t\t\t${clipXml}\n\t\t\t\t\t\t</Events>`,
     );
   }
 
-  // 4. Gzip and return
-  return gzipSync(Buffer.from(xml, 'utf-8'), { level: 9 });
+  return out;
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+/** Escape a literal string for safe use inside a RegExp. */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /** Escape XML special characters in attribute values. */
 function escapeXml(str: string): string {
@@ -188,21 +254,21 @@ function beatStr(beats: number): string {
   return parseFloat(beats.toFixed(6)).toString();
 }
 
-const CLIP_LENGTH = 0.25; // sixteenth-note duration (beats)
+const DEFAULT_CLIP_LENGTH = 4; // beats — fallback for the last clip when no next stamp
 
 /**
  * Build a single MidiClip XML snippet for insertion into ArrangerAutomation > Events.
- * The clip is a 0.25-beat marker with one C3 (pitch 60) note, velocity 100.
+ * The clip extends from `startBeats` to `endBeats` with one C3 (pitch 60) MIDI note.
  */
 function buildMidiClipXml(
   id: number,
-  ts: number,
-  bpm: number,
+  startBeats: number,
+  endBeats: number,
   clipName: string,
 ): string {
-  const beats = ts * (bpm / 60);
-  const start = beatStr(beats);
-  const end = beatStr(beats + CLIP_LENGTH);
+  const start = beatStr(startBeats);
+  const end = beatStr(endBeats);
+  const length = endBeats - startBeats;
   const name = escapeXml(clipName);
 
   return [
@@ -213,15 +279,15 @@ function buildMidiClipXml(
     `\t<CurrentEnd Value="${end}" />`,
     `\t<Loop>`,
     `\t\t<LoopStart Value="0" />`,
-    `\t\t<LoopEnd Value="${CLIP_LENGTH}" />`,
+    `\t\t<LoopEnd Value="${length}" />`,
     `\t\t<StartRelative Value="0" />`,
     `\t\t<LoopOn Value="false" />`,
-    `\t\t<OutMarker Value="${CLIP_LENGTH}" />`,
+    `\t\t<OutMarker Value="${length}" />`,
     `\t\t<HiddenLoopStart Value="0" />`,
-    `\t\t<HiddenLoopEnd Value="${CLIP_LENGTH}" />`,
+    `\t\t<HiddenLoopEnd Value="${length}" />`,
     `\t</Loop>`,
     `\t<Name Value="${name}" />`,
-    `\t<Annotation Value="" />`,
+    `\t<Annotation Value="0" />`,
     `\t<Color Value="4" />`,
     `\t<LaunchMode Value="0" />`,
     `\t<LaunchQuantisation Value="0" />`,
@@ -239,7 +305,7 @@ function buildMidiClipXml(
     `\t</Envelopes>`,
     `\t<ScrollerTimePreserver>`,
     `\t\t<LeftTime Value="0" />`,
-    `\t\t<RightTime Value="${CLIP_LENGTH}" />`,
+    `\t\t<RightTime Value="${length}" />`,
     `\t</ScrollerTimePreserver>`,
     `\t<TimeSelection>`,
     `\t\t<AnchorTime Value="0" />`,
@@ -280,7 +346,7 @@ function buildMidiClipXml(
     `\t\t<KeyTracks>`,
     `\t\t\t<KeyTrack Id="0">`,
     `\t\t\t\t<Notes>`,
-    `\t\t\t\t\t<MidiNoteEvent Time="0" Duration="${CLIP_LENGTH}" Velocity="100" OffVelocity="64" IsEnabled="true" />`,
+    `\t\t\t\t\t<MidiNoteEvent Time="0" Duration="${length}" Velocity="100" OffVelocity="64" IsEnabled="true" />`,
     `\t\t\t\t</Notes>`,
     `\t\t\t\t<MidiKey Value="60" />`,
     `\t\t\t</KeyTrack>`,

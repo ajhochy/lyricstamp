@@ -1,0 +1,53 @@
+{
+  "run_id": "2026-06-05-retro-session-storage",
+  "issue": 25,
+  "date": "2026-06-05",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": false,
+  "criteria_results": [],
+  "process_issues": [],
+  "summary": "Adherence retro for the PR #25 server-side session-storage run. Outcome was correct and verified (63 unit, 17+17 e2e, CI green, 5 sessions migrated). Adherence was partial: two chain steps ran in-process without a Skill-tool invocation, and the coding-agent subagent over-reached into the project-state-updater step.",
+  "workflow_adherence": {
+    "expected_chain": [
+      "workflow-orchestrator",
+      "planning-agent",
+      "acceptance-contract",
+      "coding-agent",
+      "verification-gate",
+      "project-state-updater",
+      "failure-postmortem"
+    ],
+    "observed_chain": [
+      "workflow-orchestrator (Skill invoked)",
+      "planning-agent (in-process; artifact docs/ai/current-plan.md written; Skill NOT invoked)",
+      "acceptance-contract (in-process; failing contract tests written red-first; Skill NOT invoked)",
+      "coding-agent (subagent, sonnet)",
+      "verification-gate (Skill invoked; same-response evidence)",
+      "project-state-updater (Skill invoked)",
+      "failure-postmortem (artifact written)"
+    ],
+    "skipped_skills": [],
+    "issues": [
+      {
+        "workflow_category": "W1",
+        "affected_skill": "workflow-orchestrator",
+        "description": "planning-agent and acceptance-contract were executed in-process and announced in prose ('Using planning-agent...', 'acceptance-contract / TDD') but the Skill tool was never invoked for them. Guard 5 requires in-process chain steps to still invoke the Skill (verification-gate and project-state-updater WERE invoked correctly, so the gap is inconsistent application, not total bypass). Artifacts were produced, so impact was low this run.",
+        "detected_by": "retrospective"
+      },
+      {
+        "workflow_category": "W1",
+        "affected_skill": "coding-agent",
+        "description": "The dispatched coding-agent subagent updated docs/ai/project-state.md, decisions.md, repo-map.md, and testing-guide.md (the project-state-updater step) BEFORE verification-gate ran, and returned a memory-update summary instead of the explicitly-requested validation report (commands run + pass/fail). The orchestrator had to independently re-run all checks (correct per verification-gate discipline) and re-do project-state-updater after verification. coding-agent should report validation evidence and NOT perform the downstream memory-update step.",
+        "detected_by": "retrospective"
+      },
+      {
+        "workflow_category": "W3",
+        "affected_skill": "workflow-orchestrator",
+        "description": "Host (Claude Code session) exposed no TodoWrite tool; the orchestrator and downstream skills repeatedly instruct 'expand into TodoWrite'. Checklist was tracked in docs/ai/current-plan.md instead. Minor; skills could acknowledge a no-TodoWrite fallback once.",
+        "detected_by": "retrospective"
+      }
+    ],
+    "overall_score": "partial"
+  }
+}

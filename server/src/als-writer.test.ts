@@ -40,14 +40,13 @@ describe('writeAlsFile', () => {
     it('renames the track EffectiveName in the output', () => {
       const result = writeAlsFile({ bpm: 120, trackName: 'Lead Sheet', stamps: [] });
       const xml = gunzipToString(result);
-      expect(xml).toContain('<EffectiveName Value="Lead Sheet">');
+      expect(xml).toContain('<EffectiveName Value="Lead Sheet" />');
     });
 
     it('template default track name is replaced', () => {
       const result = writeAlsFile({ bpm: 120, trackName: 'My Lyrics', stamps: [] });
       const xml = gunzipToString(result);
-      // Original template name should no longer be the first EffectiveName
-      const firstMatch = xml.match(/<EffectiveName Value="([^"]+)">/)?.[1];
+      const firstMatch = xml.match(/<EffectiveName Value="([^"]+)" \/>/)?.[1];
       expect(firstMatch).toBe('My Lyrics');
     });
 
@@ -66,7 +65,7 @@ describe('writeAlsFile', () => {
     it('Leadsheet +LYRICS track name variant appears correctly', () => {
       const result = writeAlsFile({ bpm: 120, trackName: 'Leadsheet +LYRICS', stamps: [] });
       const xml = gunzipToString(result);
-      expect(xml).toContain('<EffectiveName Value="Leadsheet +LYRICS">');
+      expect(xml).toContain('<EffectiveName Value="Leadsheet +LYRICS" />');
     });
   });
 
@@ -86,22 +85,24 @@ describe('writeAlsFile', () => {
   });
 
   describe('beat math', () => {
-    it('bpm=120, ts=1.5 → clip at beat 3', () => {
-      // beats = 1.5 * (120 / 60) = 1.5 * 2 = 3.0
+    // ts values are in BEATS — AbletonOSC /live/song/get/current_song_time returns beats.
+    // No seconds→beats conversion: ts is used directly as the clip position in beats.
+
+    it('ts=1.5 (beats) → clip at beat 1.5 (no bpm conversion applied)', () => {
+      // Previously this test assumed ts=1.5 was seconds and expected 1.5*(120/60)=3.
+      // Correct: ts is already in beats, clip lands at beat 1.5.
       const stamps: AlsStampInput[] = [{ ts: 1.5, clipName: 'Verse 1' }];
       const result = writeAlsFile({ bpm: 120, trackName: 'Test', stamps });
       const xml = gunzipToString(result);
-      expect(xml).toContain('Time="3"');
+      expect(xml).toContain('Time="1.5"');
     });
 
-    it('bpm=76, ts=10.0 → clip at beat ~12.6667', () => {
-      // beats = 10.0 * (76 / 60) = 12.666...
-      const beats = 10.0 * (76 / 60);
-      const expectedBeatStr = parseFloat(beats.toFixed(6)).toString();
+    it('ts=10.0 (beats) → clip at beat 10.0 regardless of bpm', () => {
+      // Previously assumed seconds and expected 10*(76/60)≈12.667. Correct: beat 10.
       const stamps: AlsStampInput[] = [{ ts: 10.0, clipName: 'Chorus 1' }];
       const result = writeAlsFile({ bpm: 76, trackName: 'Test', stamps });
       const xml = gunzipToString(result);
-      expect(xml).toContain(`Time="${expectedBeatStr}"`);
+      expect(xml).toContain('Time="10"');
     });
 
     it('ts=0.0 → clip at beat 0', () => {
@@ -111,7 +112,8 @@ describe('writeAlsFile', () => {
       expect(xml).toContain('Time="0"');
     });
 
-    it('multiple stamps produce multiple MidiClip elements', () => {
+    it('multiple stamps produce multiple MidiClip elements at correct beat positions', () => {
+      // ts values are musical beat positions: 0, 4, 8 = bar 1, bar 2, bar 3 in 4/4
       const stamps: AlsStampInput[] = [
         { ts: 0.0, clipName: 'Verse 1' },
         { ts: 4.0, clipName: 'Chorus 1' },
@@ -121,6 +123,9 @@ describe('writeAlsFile', () => {
       const xml = gunzipToString(result);
       const clipMatches = xml.match(/<MidiClip /g);
       expect(clipMatches).toHaveLength(3);
+      expect(xml).toContain('Time="0"');
+      expect(xml).toContain('Time="4"');
+      expect(xml).toContain('Time="8"');
     });
   });
 
@@ -178,6 +183,69 @@ describe('writeAlsFile', () => {
       const xml = gunzipToString(result);
       expect(xml).toContain('<MidiClip Id="0"');
       expect(xml).toContain('<MidiClip Id="1"');
+    });
+  });
+
+  describe('multi-track (tracks[] mode)', () => {
+    // Helper: return the substring for a given MidiTrack block (track 0 or 1).
+    function trackBlock(xml: string, index: 0 | 1): string {
+      const starts = [...xml.matchAll(/<MidiTrack Id="\d+"/g)].map((m) => m.index ?? -1);
+      const from = starts[index];
+      const to = index + 1 < starts.length ? starts[index + 1] : xml.length;
+      return xml.slice(from, to);
+    }
+
+    it('populates lyrics on the chart track and images on the leadsheet track', () => {
+      const result = writeAlsFile({
+        tracks: [
+          { track: 'chart', name: 'Vocals +LYRICS', stamps: [{ ts: 2, clipName: 'Amazing grace' }] },
+          { track: 'leadsheet', name: 'leadsheet +LYRICS [-2n]', stamps: [{ ts: 5, clipName: '[img:page1.png]' }] },
+        ],
+      });
+      const xml = gunzipToString(result);
+
+      const chart = trackBlock(xml, 0);
+      const leadsheet = trackBlock(xml, 1);
+
+      // Lyric clip is in the chart track, NOT the leadsheet track.
+      expect(chart).toContain('<Name Value="Amazing grace" />');
+      expect(chart).not.toContain('[img:page1.png]');
+      // Image clip is in the leadsheet track, NOT the chart track.
+      expect(leadsheet).toContain('<Name Value="[img:page1.png]" />');
+      expect(leadsheet).not.toContain('Amazing grace');
+    });
+
+    it('renames each track to its spec name', () => {
+      const result = writeAlsFile({
+        tracks: [
+          { track: 'chart', name: 'Vocals +LYRICS', stamps: [] },
+          { track: 'leadsheet', name: 'Sheet Pages', stamps: [] },
+        ],
+      });
+      const xml = gunzipToString(result);
+      expect(trackBlock(xml, 0)).toContain('<EffectiveName Value="Vocals +LYRICS" />');
+      expect(trackBlock(xml, 1)).toContain('<EffectiveName Value="Sheet Pages" />');
+    });
+
+    it('assigns globally-unique clip IDs across both tracks', () => {
+      const result = writeAlsFile({
+        tracks: [
+          { track: 'chart', name: 'L', stamps: [{ ts: 0, clipName: 'a' }, { ts: 1, clipName: 'b' }] },
+          { track: 'leadsheet', name: 'S', stamps: [{ ts: 0, clipName: 'c' }] },
+        ],
+      });
+      const xml = gunzipToString(result);
+      const ids = [...xml.matchAll(/<MidiClip Id="(\d+)"/g)].map((m) => m[1]);
+      expect(ids).toHaveLength(3);
+      expect(new Set(ids).size).toBe(3); // all unique
+    });
+
+    it('leaves the leadsheet track empty when only chart stamps are given', () => {
+      const result = writeAlsFile({
+        tracks: [{ track: 'chart', name: 'Vocals +LYRICS', stamps: [{ ts: 0, clipName: 'x' }] }],
+      });
+      const xml = gunzipToString(result);
+      expect(trackBlock(xml, 1)).not.toContain('<MidiClip ');
     });
   });
 });

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for Electron/V8: on Apple Silicon V8 allocates its JIT code
+         range via MAP_JIT, which under hardened runtime requires this entitlement.
+         Without it V8 aborts at Isolate::Init on arm64. -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <!-- Required for some native Node modules that need unsigned executable memory -->
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <!-- Required for native .node modules whose bundled dylibs are not individually
+         Apple-signed (node-osc, ws, etc.) -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <!-- Outbound network access: OSC to Ableton Live, WebSocket clients -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+</dict>
+</plist>

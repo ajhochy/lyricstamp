@@ -243,6 +243,142 @@ html, body {
   color: var(--accent-strong);
 }
 
+/* Transport controls (Play / Pause / Stop) */
+.transport {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 2px;
+}
+.transport .tbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg-1);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.transport .tbtn:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+.transport .tbtn.active {
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+.transport .tbtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Sessions menu */
+.sessions {
+  position: relative;
+}
+.sessions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  width: 300px;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sessions-save {
+  display: flex;
+  gap: 6px;
+}
+.sessions-save .input {
+  flex: 1;
+}
+.sessions-row-actions {
+  display: flex;
+  gap: 6px;
+}
+.sessions-row-actions .btn {
+  flex: 1;
+  justify-content: center;
+}
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.sessions-empty {
+  color: var(--fg-3);
+  font-size: 12px;
+  padding: 10px 4px;
+  text-align: center;
+}
+.session-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 7px;
+}
+.session-row.current {
+  background: var(--accent-bg);
+}
+.session-load {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 7px 9px;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--fg-1);
+  text-align: left;
+}
+.session-load:hover {
+  background: var(--bg-3);
+}
+.session-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-0);
+}
+.session-meta {
+  font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.02em;
+}
+.session-del {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+}
+.session-del:hover {
+  background: var(--bg-3);
+  color: var(--fg-0);
+}
+
 /* Tabs */
 .tabs {
   display: inline-flex;
@@ -437,6 +573,39 @@ html, body {
   font-family: var(--font-mono);
 }
 
+.stamp-target-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--fg-3);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+
+/* "Now playing" — the previously-stamped line, shown above the next target so
+   the operator can follow along and time the next stamp. */
+.lyric-now-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--accent-strong);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+}
+.lyric-prev {
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--fg-2);
+  text-align: center;
+  text-wrap: balance;
+  max-width: 900px;
+  margin-bottom: 28px;
+}
+
 .lyric-current {
   font-size: var(--lyric-size, 64px);
   font-weight: 600;
@@ -449,7 +618,7 @@ html, body {
   transition: opacity 220ms ease, transform 220ms ease;
 }
 
-.lyric-current.entering {
+.lyric-current.next-up {
   animation: lyric-in 320ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 @keyframes lyric-in {
@@ -502,6 +671,21 @@ html, body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
+}
+/* Drag handle on the log's left edge to resize the panel */
+.log-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 5;
+}
+.log-resizer:hover,
+.log-resizer:active {
+  background: var(--accent-border);
 }
 .log-header {
   display: flex;
@@ -545,6 +729,8 @@ html, body {
   cursor: default;
 }
 .log-row:hover { background: var(--bg-2); }
+.log-row.clickable { cursor: pointer; }
+.log-row.clickable:hover { background: var(--accent-bg); }
 .log-row .ts { color: var(--fg-2); font-variant-numeric: tabular-nums; font-weight: 500; }
 .log-row .idx { color: var(--fg-4); font-size: 10px; text-align: right; }
 .log-row .text {
@@ -554,6 +740,18 @@ html, body {
   text-overflow: ellipsis;
   font-family: var(--font-sans);
   font-size: 12px;
+}
+.log-row .log-edit {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--fg-0);
+  background: var(--bg-3);
+  border: 1px solid var(--accent-border);
+  border-radius: 5px;
+  padding: 2px 6px;
+  outline: none;
 }
 .log-row .undo {
   opacity: 0;

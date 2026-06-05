@@ -118,15 +118,14 @@ Some lyrics
   });
 
   describe('lyric lines', () => {
-    it('strips chord markers and keeps lyric text', () => {
+    it('preserves chord markers inline with lyric text in ChordPro format', () => {
       const song = parseChordPro('', SIMPLE_SONG);
       const lyricLines = song.lines.filter((l) => 'text' in l).map((l) => l.text ?? '');
-      // "[G]Amazing [G7]grace how [C]sweet the [G]sound" should become
-      // "Amazing grace how sweet the sound"
       const firstLine = lyricLines[0];
       expect(firstLine).toBeTruthy();
-      expect(firstLine).not.toMatch(/\[/);
-      expect(firstLine).not.toMatch(/\]/);
+      expect(firstLine).toContain('[G]');
+      expect(firstLine).toContain('[G7]');
+      expect(firstLine).toContain('[C]');
       expect(firstLine).toContain('Amazing');
     });
 
