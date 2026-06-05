@@ -1,0 +1,30 @@
+{
+  "run_id": "2026-06-05-create-track-prompt-electron",
+  "issue": 32,
+  "date": "2026-06-05",
+  "smoke_result": "fail",
+  "verification_claimed": "PASS",
+  "divergence": true,
+  "summary": "Manual smoke of the new 'New +LYRICS track' picker option: clicking it did nothing — no name dialog. Root cause: the handler used window.prompt(), which Electron does NOT support (it returns null silently, logging 'prompt() is and will not be supported'). The e2e suite passed because it runs the BUILD target in plain Chromium (where prompt works / was stubbed), so it could not catch an Electron-only API gap.",
+  "criteria_results": [
+    {
+      "criterion_id": "create-track-c1",
+      "text": "Selecting 'New +LYRICS track' lets the user name + create a track live",
+      "contract_status": "present",
+      "smoke_status": "fail",
+      "category": "C4",
+      "notes": "window.prompt is unsupported in Electron BrowserWindow → no dialog, no creation. Fix: replace with an inline DOM input (works in both Chromium and Electron). The server endpoint POST /api/live/tracks is fine; bug is client-only."
+    }
+  ],
+  "process_issues": [
+    "Verification gap: the e2e build target (Playwright + Chromium) does not exercise Electron-specific API behavior. window.prompt/alert/confirm are disabled in Electron — these must be avoided in renderer code or covered by an Electron-target smoke. Lesson: renderer code must not rely on window.prompt/alert/confirm; the app-target (packaged .app) smoke is the only gate that catches these.",
+    "Repair done in-process (client-only, precise root cause)."
+  ],
+  "workflow_adherence": {
+    "expected_chain": ["coding-agent", "verification-gate", "manual-smoke", "failure-postmortem", "repair", "verification-gate"],
+    "observed_chain": ["coding-agent (create-track)", "independent re-verify PASS", "manual-smoke FAIL (window.prompt in Electron)", "failure-postmortem (this)"],
+    "skipped_skills": [],
+    "issues": [],
+    "overall_score": "partial"
+  }
+}

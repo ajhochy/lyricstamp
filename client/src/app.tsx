@@ -135,6 +135,9 @@ export function App() {
   // Track list fetched from Ableton when connected.
   const [liveTracks, setLiveTracks] = useState<{ index: number; name: string }[]>([]);
   const [applyingToAbleton, setApplyingToAbleton] = useState<boolean>(false);
+  // Inline "new +LYRICS track" creation (window.prompt is unsupported in Electron).
+  const [creatingTrack, setCreatingTrack] = useState<boolean>(false);
+  const [newTrackName, setNewTrackName] = useState<string>('');
 
   // Fetch track list from server whenever Ableton connects (connected flips to true).
   useEffect(() => {
@@ -197,6 +200,35 @@ export function App() {
       setApplyingToAbleton(false);
     }
   }, [connected, handlerStatus, liveTrackIndex, stamps, song, pushToast]);
+
+  // Create a new +LYRICS track from the inline editor (window.prompt is
+  // unsupported in Electron, so we use an inline input instead of a dialog).
+  const submitNewTrack = useCallback(async () => {
+    const name = newTrackName.trim() || 'Lyrics';
+    try {
+      const r = await fetch('/api/live/tracks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!r.ok) {
+        let errMsg = 'Unknown error';
+        try { errMsg = ((await r.json()) as { error?: string }).error ?? errMsg; } catch { /* ignore */ }
+        pushToast(`Create track failed: ${errMsg}`);
+        return;
+      }
+      const created = await r.json() as { index: number; name: string };
+      const list = await fetch('/api/live/tracks')
+        .then((r2) => (r2.ok ? r2.json() as Promise<{ index: number; name: string }[]> : Promise.resolve([])))
+        .catch(() => [] as { index: number; name: string }[]);
+      setLiveTracks(list);
+      setLiveTrackIndex(created.index);
+      setCreatingTrack(false);
+      pushToast(`Created "${created.name}"`);
+    } catch {
+      pushToast('Create track failed: backend unreachable');
+    }
+  }, [newTrackName, pushToast, setLiveTrackIndex]);
 
   // Reason why the Apply button is disabled (null = enabled).
   const applyDisabledReason = useMemo<string | null>(() => {
@@ -899,43 +931,10 @@ export function App() {
                 onChange={(e) => {
                   const val = e.target.value;
                   if (val === '__create__') {
-                    // Revert the select immediately (before the async prompt)
-                    e.target.value = liveTrackIndex !== null ? String(liveTrackIndex) : '';
-                    const defaultName = songName.trim() || 'Lyrics';
-                    const userInput = window.prompt('New track name:', defaultName);
-                    if (userInput === null) {
-                      // User cancelled — leave selection unchanged
-                      return;
-                    }
-                    fetch('/api/live/tracks', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ name: userInput }),
-                    })
-                      .then(async (r) => {
-                        if (!r.ok) {
-                          let errMsg = 'Unknown error';
-                          try {
-                            const body = await r.json() as { error?: string };
-                            errMsg = body.error ?? errMsg;
-                          } catch { /* ignore */ }
-                          pushToast(`Create track failed: ${errMsg}`);
-                          return;
-                        }
-                        const created = await r.json() as { index: number; name: string };
-                        // Re-fetch track list and auto-select the new track
-                        fetch('/api/live/tracks')
-                          .then((r2) => (r2.ok ? r2.json() as Promise<{ index: number; name: string }[]> : Promise.resolve([])))
-                          .then((tracks) => {
-                            setLiveTracks(tracks);
-                            setLiveTrackIndex(created.index);
-                          })
-                          .catch(() => {});
-                        pushToast(`Created "${created.name}"`);
-                      })
-                      .catch(() => {
-                        pushToast('Create track failed: backend unreachable');
-                      });
+                    // Open the inline name editor. Electron has no prompt dialog,
+                    // so we use an inline input instead of a modal.
+                    setNewTrackName(songName.trim() || 'Lyrics');
+                    setCreatingTrack(true);
                   } else {
                     setLiveTrackIndex(val === '' ? null : Number(val));
                   }
@@ -968,6 +967,24 @@ export function App() {
               >
                 ↺
               </button>
+              {creatingTrack && (
+                <span className="new-track-inline">
+                  <input
+                    className="input"
+                    autoFocus
+                    value={newTrackName}
+                    placeholder="Track name"
+                    aria-label="New track name"
+                    onChange={(e) => setNewTrackName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { e.preventDefault(); void submitNewTrack(); }
+                      else if (e.key === 'Escape') { e.preventDefault(); setCreatingTrack(false); }
+                    }}
+                  />
+                  <button className="btn primary" onClick={() => void submitNewTrack()}>Create</button>
+                  <button className="btn" onClick={() => setCreatingTrack(false)}>Cancel</button>
+                </span>
+              )}
             </div>
           )}
           {/* Apply to Ableton — only in lyrics tab */}
