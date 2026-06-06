@@ -14,6 +14,12 @@ import {
   deleteSession,
 } from './session-store.js';
 import type { OscClient } from './osc-client.js';
+import {
+  resolveRemoteScriptPaths,
+  getRemoteScriptStatus,
+  installRemoteScript,
+  RemoteScriptError,
+} from './remote-script.js';
 
 // ---------------------------------------------------------------------------
 // OscClient injection (set once on startup; used by live-write routes)
@@ -869,6 +875,52 @@ async function handlePostApplyLeadsheet(
 }
 
 // ---------------------------------------------------------------------------
+// Remote-script routes
+// ---------------------------------------------------------------------------
+
+function handleGetRemoteScriptStatus(_req: http.IncomingMessage, res: http.ServerResponse): void {
+  json(res, 200, getRemoteScriptStatus(resolveRemoteScriptPaths()));
+}
+
+async function handlePostRemoteScriptInstall(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  let userLibPath: string | undefined;
+  const raw = (await readBody(req)).trim();
+  if (raw) {
+    let parsed: { userLibPath?: unknown };
+    try {
+      parsed = JSON.parse(raw) as { userLibPath?: unknown };
+    } catch {
+      json(res, 400, { error: 'Invalid JSON body' });
+      return;
+    }
+    if (parsed.userLibPath !== undefined) {
+      if (typeof parsed.userLibPath !== 'string' || parsed.userLibPath.trim() === '') {
+        json(res, 400, { error: 'userLibPath must be a non-empty string' });
+        return;
+      }
+      userLibPath = parsed.userLibPath;
+    }
+  }
+  try {
+    const result = installRemoteScript(resolveRemoteScriptPaths(userLibPath));
+    const warning =
+      result.createdRemoteScriptsDir && userLibPath
+        ? `Installed under ${userLibPath} — confirm that is your Ableton User Library.`
+        : undefined;
+    json(res, 200, { installed: result.installed, installedVersion: result.installedVersion, warning });
+  } catch (err) {
+    if (err instanceof RemoteScriptError) {
+      json(res, err.code === 'write-failed' ? 500 : 409, { error: err.message, code: err.code });
+      return;
+    }
+    throw err;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -888,6 +940,15 @@ export async function handleRequest(
 
   if (method === 'GET' && path === '/api/health') {
     handleHealth(req, res);
+    return;
+  }
+
+  if (method === 'GET' && path === '/api/remote-script/status') {
+    handleGetRemoteScriptStatus(req, res);
+    return;
+  }
+  if (method === 'POST' && path === '/api/remote-script/install') {
+    await handlePostRemoteScriptInstall(req, res);
     return;
   }
 
