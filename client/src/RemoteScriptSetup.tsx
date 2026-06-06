@@ -10,6 +10,7 @@ export function RemoteScriptSetup({ connected, handlerStatus }: Props): JSX.Elem
   const [status, setStatus] = useState<RemoteScriptStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -34,15 +35,18 @@ export function RemoteScriptSetup({ connected, handlerStatus }: Props): JSX.Elem
     async (userLibPath?: string) => {
       setBusy(true);
       setError(null);
+      setWarning(null);
       try {
         const res = await fetch('/api/remote-script/install', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(userLibPath ? { userLibPath } : {}),
         });
-        const data = (await res.json()) as { error?: string };
+        const data = (await res.json()) as { error?: string; warning?: string };
         if (!res.ok) {
           setError(data.error ?? 'Install failed');
+        } else {
+          setWarning(data.warning ?? null);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Install failed');
@@ -97,6 +101,7 @@ export function RemoteScriptSetup({ connected, handlerStatus }: Props): JSX.Elem
               </div>
             )}
             {error && <div className="rss-error">{error}</div>}
+            {warning && <div className="rss-hint">{warning}</div>}
           </div>
         </li>
         <li className={step2Done ? 'done' : ''} data-step="enable">

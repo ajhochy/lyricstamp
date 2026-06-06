@@ -5,16 +5,15 @@ import { test, expect } from '@playwright/test';
 //   - Track picker is disabled when Ableton is not connected
 //   - Apply button is present and disabled with a reason tooltip
 //   - Apply button is hidden in the leadsheet tab
-//   - handler-absent banner CSS styling and content (rendered via DOM injection)
+//   - setup-checklist state when handler is absent (verified via API route mocking)
 //   - stamp() appends locally without side-effects (no OSC call on ArrowRight)
 //
 // Notes on testing environment:
 // - The e2e server may or may not have a live Ableton connection. Tests must
 //   not assume a specific connection state; instead they assert stable structural
 //   properties (button presence, disabled attribute, tooltip text format).
-// - Handler-absent banner behavior is verified by DOM injection (simulating
-//   what React renders when handlerStatus === 'absent'), because the WS tick
-//   is not interceptable via Playwright route in standard mode.
+// - Setup-checklist behavior when handlerStatus === 'absent' is verified using
+//   API route mocking, not DOM injection.
 
 const CHORD_PRO_SONG = `
 {title: Amazing Grace}

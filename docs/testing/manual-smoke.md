@@ -36,17 +36,18 @@ fork to Ableton and that both custom handlers load without errors.
 
 ## Smoke 2 — Handler-presence probe (version check)
 
-**Goal:** Confirm the app detects the patched fork via `probeHandler()` and clears
-the "Remote script not loaded" banner.
+**Goal:** Confirm the app detects the patched fork via `probeHandler()` and completes
+the setup checklist.
 
 1. Start the app (`npm run dev` or launch the `.app`).
 2. Open a set in Ableton Live (any set with at least one track).
 3. Observe the connection status in the app header — it should show "Connected".
-4. The **handler-absent banner** ("Remote script not loaded…") should NOT appear
-   once the probe resolves (within ~600 ms of connect).
+4. The setup checklist's **step ③ "Patched script detected"** should flip to ✓
+   once the probe resolves (within ~600 ms of connect). Once all three steps are
+   green the checklist collapses and is no longer visible.
 
-**Pass:** Banner is absent; browser DevTools shows no `/live/track/arrangement_writer_version`
-timeout errors in the server log.
+**Pass:** Checklist is gone (all steps ✓); browser DevTools shows no
+`/live/track/arrangement_writer_version` timeout errors in the server log.
 
 ---
 
@@ -98,21 +99,24 @@ Verify:
 
 ---
 
-## Smoke 5 — Handler-absent banner (negative path)
+## Smoke 5 — Setup checklist step ③ (negative path)
 
-**Goal:** Confirm the banner appears when stock (unpatched) AbletonOSC is loaded.
+**Goal:** Confirm the checklist stays visible and step ③ stays unchecked when stock
+(unpatched) AbletonOSC is loaded.
 
 1. Temporarily swap out the remote script with the upstream ideoforms/AbletonOSC
    (or simply rename `abletonosc/track.py` to remove the custom handlers), reload
    remote scripts in Live (Cmd+Shift+.), and ensure the app is connected.
-2. Observe the app header.
+2. Observe the setup checklist.
 
 Verify:
-- [ ] The yellow **"Remote script not loaded — run `npm run install:remote-script`…"**
-  banner appears.
-- [ ] The "Apply to Ableton" button is disabled while the banner is shown.
+- [ ] The setup checklist remains visible (not all three steps are ✓).
+- [ ] Step ② (connected) shows ✓ because the OSC connection is up.
+- [ ] Step ③ **"Patched script detected"** stays unchecked — the probe does not
+  detect the custom handler in the stock fork.
+- [ ] The "Apply to Ableton" button is disabled while the checklist is visible.
 
-**Pass:** Banner visible; Apply button disabled.
+**Pass:** Checklist visible with step ③ unchecked; Apply button disabled.
 
 Restore the patched `track.py` when done.
 
