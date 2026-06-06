@@ -4,413 +4,392 @@ _Updated: 2026-06-05_
 
 ---
 
-## ⚠️ REVISION 2026-06-05 — Model 2: proof-then-apply (SUPERSEDES per-stamp live write)
+## Feature: leadsheet-apply (Apply to Ableton for the PDF/leadsheet tab)
+
+### Problem
+
+The lyrics tab already has "Apply to Ableton" (proof-then-apply, PR #32, merged). The
+leadsheet tab has an Export .zip button but no live-apply path. A music director who
+has stamped pages of a PDF leadsheet to beat positions must export a zip, extract it,
+and manually drop it into the Ableton project folder. This breaks the live-performance
+workflow.
+
+### Goal
+
+Add **Apply to Ableton** to the leadsheet tab: user stamps PDF pages to beats (existing),
+picks a `+LYRICS` track, clicks "Apply to Ableton" → the app (1) writes each stamped
+page's PNG into the live Ableton project directory under `Lyrics/<slug>/page-N.png`, and
+(2) writes arrangement clips on the chosen track at the stamp beats named
+`[img:<slug>/page-N.png] [full]`, each spanning to the next stamp. No zip export/import
+required. The existing Export .zip button remains intact.
+
+---
+
+## Clarification interview
+
+Auto Mode is active. The feature spec is fully locked: three product decisions, exact
+clip-name format, exact file layout, validation strategy, and investigation questions all
+specified in the task prompt. No observable-outcome ambiguities exist beyond what the
+spec explicitly leaves open. Skip rationale: the spec provides the observable outcome
+(clips in Arrangement + PNGs in project dir), the trigger (button click), boundary
+conditions (unsaved set, disconnected, re-apply), and done-definition for every
+acceptance criterion. Recorded here per planning-agent discipline.
+
+---
+
+## Intent + Constraints Pass
+
+1. **What is the user actually trying to accomplish?**
+   After proofing stamped PDF pages in the leadsheet tab, press "Apply to Ableton" → page
+   PNGs land in the live Ableton project folder AND named clips appear in the Arrangement
+   at the correct beats, so AbleSet immediately reads them — no export/import step.
+
+2. **Scope and non-goals**
+   _In scope:_
+   - New `/api/live/apply-leadsheet` server endpoint
+   - New Python OSC handler in the vendored fork for getting the Live set's project path
+   - Track-picker + Apply button in the leadsheet tab header (mirror the lyrics tab)
+   - PNG write to the Ableton project directory server-side
+   - Clip writes via the existing `writeStampClip` OSC path
+   - Re-apply semantics: overwrite images, add fresh clips
+   - `handlerStatus` probe already shipped — reused, not re-implemented
+
+   _Not in scope (explicit non-goals):_
+   - Removing/undoing arrangement clips from inside the app
+   - Modifying the lyrics tab's Apply path
+   - Windows/Linux (macOS-only throughout)
+   - AbleSet round-trip verification in CI (manual smoke only)
+   - Changing the existing Export .zip button
+
+3. **Hard constraints**
+   - Do NOT commit `.env`, Live session data, or user-generated exports (AGENTS.md)
+   - All work on feature branches; no direct push to `main`
+   - CI cannot run the Ableton-dependent path; live file-write + clip placement = manual smoke
+   - Keep existing 100+ unit tests and 35 E2E tests intact
+   - Clip name format must be `[img:<slug>/page-N.png] [full]` — identical to zip export so
+     AbleSet reads live-applied clips the same way (AbleSet reads the clip name, not the file
+     directly)
+   - Unsaved set (no project directory) must block Apply with a clear user-facing message
+
+4. **Design tensions**
+   - **Getting the project path via OSC vs. in-band workaround**: Live's Python LOM does not
+     expose `Song.project_path` directly. The chosen approach (new fork handler, see below)
+     adds one more vendored OSC handler — which is reliable but means `install:remote-script`
+     must be re-run by existing users.
+   - **Re-apply = overwrite images + add clips**: idempotent image writes are safe; adding
+     fresh clips (not replacing) means re-applying creates duplicate arrangement clips. This
+     is the explicit product decision — simpler than a "find and replace" approach.
+   - **PNG rendering is client-side only**: `pageRenderer.renderToDataUrl` is a browser API
+     (canvas). The server cannot render PDF pages. Therefore the client must render PNGs and
+     send them in the request body — same pattern as the zip export.
+
+5. **Cheapest path that proves the idea**
+   Minimal slice: (a) new fork handler returning the set file path, (b) server endpoint that
+   decodes PNGs and writes them to disk + writes clips via the existing `writeStampClip`, (c)
+   client Apply button in the leadsheet tab. Everything else reuses shipped code.
+
+---
+
+## Prior Art
+
+The lyrics tab's proof-then-apply (PR #32) is the direct prior art and the design mirror.
+Key references:
+- `server/src/osc-client.ts`: `writeStampClip`, `probeHandler`, transport seam — reused unchanged
+- `server/src/routes.ts`: `handlePostLiveApply`, `stampsToClips`, `decodePngDataUrl` — the
+  PNG decoder helper is already present (used by zip export); reused for disk write
+- `server/src/routes.ts` `handlePostExportZip`: source of truth for slug, `page-N.png` naming,
+  `[img:<slug>/page-N.png] [full]` clip name, `DEFAULT_CLIP_LENGTH` fallback — replicated exactly
+- `vendor/AbletonOSC/abletonosc/track.py`: model for adding new handlers to the fork
+- The `arrangement_writer_version` handler (already in the fork): exact pattern to follow for
+  the new `song/get/project_path` handler
+
+---
+
+## Project-Path Resolution — Investigation Findings and Decision
+
+### Investigation
+
+**Option (a): Does upstream AbletonOSC already expose a song/project path?**
+
+Confirmed: `vendor/AbletonOSC/abletonosc/song.py` has no `file_path`, `get_data`, or
+`project_path` handler. The `properties_r` list (`can_redo`, `can_undo`, `is_playing`,
+`song_length`, `session_record_status`) and `properties_rw` list are both enumerated
+explicitly — no path property is present. The `application.py` handler only exposes
+`get/version` and `get/average_process_usage`. Neither file exposes any path.
+
+**What does Ableton's Live Object Model expose?**
+
+Ableton's Python `Live.Song.Song` class does NOT have a documented `project_path`
+property. However, it does have `file_path` (string) which returns the absolute path of
+the `.als` file on disk when the set has been saved — e.g.
+`/Users/ajhochy/Music/Ableton/Great Things Project/Great Things.als`. If the set has
+never been saved, `file_path` is an empty string `""`. The project directory is therefore
+`os.path.dirname(song.file_path)` when `file_path != ""`.
+
+**Option (b): ableton-mcp `get_session_path`?**
+
+`ableton-mcp` is a different remote script entirely (not the same OSC process). It is not
+installed in this project and may not be running. Not a viable option.
+
+**Option (c): New write-free handler in the vendored fork.**
+
+The reliable path: add a `/live/song/get/project_path` handler to `song.py` in the vendored
+fork that returns `os.path.dirname(song.file_path)` when `file_path != ""` and returns
+`""` when unsaved. Pattern mirrors the `arrangement_writer_version` handler in `track.py`.
+This requires re-running `install:remote-script` + restarting Ableton, identical to the
+existing requirement for the fork.
+
+### Decision
+
+**Chosen: Option (c) — new `/live/song/get/project_path` handler in the vendored fork.**
+
+Rationale:
+- Options (a) and (b) are definitively not available (confirmed by code inspection).
+- Option (c) is one short additive Python function in the same file pattern already
+  established in this project (`arrangement_writer_version`).
+- It is write-free (read-only), so it cannot corrupt the set.
+- When `file_path == ""` (unsaved set), it returns `""` — the server checks for this and
+  returns a 409 with "Save your Ableton set first" which is shown to the user.
+- Users already need `install:remote-script` to use Apply features. The requirement is
+  unchanged in kind, only in version (the fork's handler version stays `"ableset-1"` since
+  we can bump to `"ableset-2"` in this PR for detection — see Issue 1 below).
+
+See `docs/ai/decisions.md` for the dated decision entry.
+
+---
+
+## Design
+
+### Server endpoint: POST /api/live/apply-leadsheet
+
+```
+POST /api/live/apply-leadsheet
+Body: {
+  trackIndex: number,
+  pdfName: string,           // raw PDF filename (e.g. "Great Things F Lead Sheet.pdf")
+  pages: Array<{
+    page: number,            // 1-based
+    pngDataUrl: string       // data:image/png;base64,... (client-rendered)
+  }>,
+  stamps: Array<{
+    page: number,
+    beat: number
+  }>
+}
+→ 200: { written: number, failed: Array<{page: number, beat: number, error: string}> }
+→ 400: bad body / missing fields
+→ 409: { error: "Save your Ableton set first — no project directory found" }
+→ 503: Ableton not connected
+```
+
+**Server logic (sequential)**:
+1. Guard: disconnected → 503
+2. Fetch project path via `oscClient.getSongProjectPath()` (new `OscClient` method, see
+   below) — if `""` → 409
+3. Compute `slug = slugify(pdfName.replace(/\.pdf$/i, ''))` — reuse the existing
+   `slugify()` function already in `routes.ts`
+4. Write PNGs: for each `pages[i]`, decode `pngDataUrl` via existing `decodePngDataUrl()`
+   helper, write to `<projectPath>/Lyrics/<slug>/page-<N>.png` (create dirs as needed)
+5. Build leadsheet clips: for each stamp, compute clip name
+   `[img:${slug}/page-${stamp.page}.png] [full]` and length (next beat - this beat, or
+   `DEFAULT_CLIP_LENGTH` for the last), matching `handlePostExportZip` exactly
+6. Write clips sequentially via existing `_oscClient.writeStampClip(trackIndex, name,
+   beat, length)` — same method already used by the lyrics apply path
+7. Return `{ written, failed[] }`
+
+**Key reuses** (no new logic needed):
+- `decodePngDataUrl(dataUrl)` — already in `routes.ts`
+- `slugify(name)` — already in `routes.ts`
+- `DEFAULT_CLIP_LENGTH` — already exported from `als-writer.ts`
+- `_oscClient.writeStampClip(...)` — already in `osc-client.ts`
+- `decodePngDataUrl` decoding pattern — identical to what the zip export does
+
+**File-write helper** (new, thin): `async function writePagePng(projectPath, slug, page, pngBuf)` —
+`mkdir -p <projectPath>/Lyrics/<slug>`, then `fs.writeFile(...)`. This is the only new
+server-side code beyond the endpoint glue.
+
+### OscClient: new getSongProjectPath() method
+
+```typescript
+async getSongProjectPath(): Promise<string>
+```
+Sends `/live/song/get/project_path` (new fork handler), waits for reply
+`[address, projectPath]`, returns the string. Returns `""` if `file_path` was empty in
+Live (set not saved). Uses existing `_request()` / `_registerReply` pattern.
+
+### Vendored fork: new handler in song.py
+
+```python
+# ABLESET-LYRICS-SYNC: return the project directory (dirname of set file_path).
+# Returns empty string when the set has not been saved yet.
+def song_get_project_path(params):
+    fp = self.song.file_path
+    return (os.path.dirname(fp) if fp else "",)
+
+self.osc_server.add_handler("/live/song/get/project_path", song_get_project_path)
+```
+
+Also bump `arrangement_writer_version` return value from `"ableset-1"` to `"ableset-2"` so
+the server can detect that the new handler is present (the probe already checks for any
+reply — the version string is informational only, but bumping makes debugging easier).
+
+### Client: leadsheet Apply button
+
+The leadsheet tab gets the same UI pattern as the lyrics tab:
+
+1. **Track picker** `<select>` in the header — reuse the same track-picker block from the
+   lyrics tab. Currently the track picker is rendered only when `tab === 'lyrics'` (in
+   `app.tsx`). Extend the condition to `tab === 'lyrics' || tab === 'leadsheet'`. Share the
+   same `liveTrackIndex` + `liveTracks` state (one track picker, two tabs).
+
+2. **Apply to Ableton button** — rendered in the header-actions block when
+   `tab === 'leadsheet'`, alongside the existing Export .zip button (coexist, not replace).
+
+3. **applyLeadsheetToAbleton() callback** in `app.tsx`:
+   - Guard checks: connected, `handlerStatus !== 'absent'`, `liveTrackIndex !== null`,
+     `leadsheetStamps.length > 0`, `pdfFile !== null`
+   - Render each unique stamped page to a data URL via `pageRenderer.renderToDataUrl(page)`
+     (same as `exportLeadsheet`)
+   - POST `{ trackIndex: liveTrackIndex, pdfName: pdfFile.name, pages: [...], stamps: [...] }`
+     to `/api/live/apply-leadsheet`
+   - Toast result: `"Wrote N clips"` on full success, `"Wrote N, failed M"` on partial
+
+4. **applyLeadsheetDisabledReason** useMemo — same structure as `applyDisabledReason`:
+   - `!connected` → `'Ableton not connected'`
+   - `handlerStatus === 'absent'` → `'Remote script not loaded'`
+   - `handlerStatus === 'unknown'` → `'Checking remote script…'`
+   - `liveTrackIndex === null` → `'No track selected'`
+   - `leadsheetStamps.length === 0` → `'No stamps to apply'`
+   - `!pdfFile` → `'No PDF loaded'`
+   - `null` (enabled)
+
+5. **Stamp log image-ref display** in `LeadsheetView` (views.tsx): the stamp log currently
+   shows `[img:page{s.page}.png]` but the actual clip name uses the slug-based path
+   `[img:<slug>/page-N.png]`. This is a cosmetic inconsistency that is not a blocker —
+   leave the stamp log display as-is for now and note it as a follow-up.
+
+### Failure modes
+
+| Situation | Behaviour |
+|---|---|
+| Set not saved (empty `file_path`) | 409 → toast "Save your Ableton set first" |
+| Ableton disconnected | 503 → button disabled + reason tooltip |
+| Handler absent (old fork) | Button disabled, banner shown (same as lyrics tab) |
+| Project dir not writable | File-write error → partial failure in `failed[]`, toast |
+| PNG decode fails (invalid dataUrl) | Endpoint → 400 |
+| No stamps | Button disabled |
+| No PDF | Button disabled |
+| OSC timeout writing a clip | Clip added to `failed[]`, others continue |
+| Re-apply | PNG overwritten (idempotent), fresh clips added to Arrangement |
+
+---
+
+## Atomic Issue Breakdown
+
+| Order | # | Title | Scope | Likely files | Acceptance criteria | CI-testable | Depends on |
+|---|---|---|---|---|---|---|---|
+| 1 | **LS-A** | Fork: add `/live/song/get/project_path` handler + bump version | Vendored Python fork | `vendor/AbletonOSC/abletonosc/song.py`, `vendor/AbletonOSC/abletonosc/track.py` | (1) `song.py` has `add_handler("/live/song/get/project_path", ...)` that returns `os.path.dirname(song.file_path)` or `""` when unsaved. (2) `arrangement_writer_version` in `track.py` returns `"ableset-2"`. (3) Handler is additive — no existing handler modified. | Read-only Python check; no Ableton needed for code review. Manual smoke: install + verify OSC reply. | none |
+| 2 | **LS-B** | OscClient: add `getSongProjectPath()` | Server | `server/src/osc-client.ts`, `server/src/osc-client.test.ts` | (1) `getSongProjectPath()` sends `/live/song/get/project_path`, awaits reply `[address, path]`, returns `path as string`. (2) Returns `""` when reply contains an empty string. (3) Rejects after `REPLY_TIMEOUT_MS` with an `Error`. (4) 3 new unit tests (saved set returns path, unsaved returns empty, timeout rejects). | Full CI — unit tests with mock OSC transport (existing subclass-mock pattern). | LS-A |
+| 3 | **LS-C** | Server: `POST /api/live/apply-leadsheet` endpoint | Server | `server/src/routes.ts` | (1) Returns 503 when Ableton disconnected. (2) Returns 409 when `getSongProjectPath()` returns `""`. (3) Returns 400 on missing/invalid body fields. (4) With valid body + stubbed `getSongProjectPath()` returning a temp dir: writes `page-N.png` files to `<tempDir>/Lyrics/<slug>/` and returns `{written: N, failed: []}`. (5) Slug computed by `slugify(pdfName.replace(/\.pdf$/i,''))` matching existing `slugify()`. (6) Clip name is `[img:${slug}/page-${page}.png] [full]` — identical format to zip export. (7) Clip length spans to next stamp; last clip uses `DEFAULT_CLIP_LENGTH`. (8) Partial failure: if one clip write fails OSC, the others continue; endpoint returns 200 with `failed[]`. (9) Re-apply: PNG file is overwritten (no duplicate); clips are added fresh (no de-dup). | Full CI — unit tests: slug/clip-name logic, PNG decode + write to real tmpdir, validation guards (mock OscClient). OSC + AbleSet round-trip = manual smoke only. | LS-B |
+| 4 | **LS-D** | Client: leadsheet Apply button + callback | Client | `client/src/app.tsx`, `client/src/styles.css` | (1) "Apply to Ableton" button renders in header-actions when `tab === 'leadsheet'`, alongside the Export .zip button (both visible simultaneously). (2) Button disabled with tooltip matching `applyLeadsheetDisabledReason` when: not connected / handler absent / no track / no stamps / no PDF. (3) Clicking while enabled: renders each unique stamped page to a data URL (same as export), POSTs to `/api/live/apply-leadsheet`, shows `"Wrote N clips"` toast on full success or `"Wrote N, failed M"` on partial. (4) Track picker visible when `tab === 'leadsheet'` (same picker as lyrics tab, same state). (5) `applyingLeadsheetToAbleton` boolean disables button + shows "Applying…" label during in-flight POST. (6) Existing Export .zip button unaffected. (7) Existing lyrics tab "Apply to Ableton" button unaffected. | CI: Playwright E2E tests — button presence, disabled states, coexistence with Export .zip, track picker visible in leadsheet tab. No Ableton needed for UI tests. Live PNG write + clip placement = manual smoke. | LS-C |
+| 5 | **LS-E** | Manual smoke checklist update + install-remote-script re-run note | Docs | `docs/testing/manual-smoke.md`, `docs/ai/testing-guide.md` | (1) `docs/testing/manual-smoke.md` has a new section "Apply leadsheet to Ableton" listing: (a) run `install:remote-script` to get fork v2 (new project-path handler), (b) restart Ableton, (c) load session with PDF + stamps, (d) "Apply to Ableton" in leadsheet tab, (e) verify PNGs written to project dir, (f) verify clips in Arrangement with correct names, (g) verify AbleSet reads the clips. (2) Notes the 409 smoke: unsaved set → "Save your Ableton set first" message. | Doc-only; no CI check needed. | LS-A through LS-D |
+
+### Dependency order
+
+```
+LS-A (fork: song.py handler + version bump)
+  └── LS-B (OscClient.getSongProjectPath)
+        └── LS-C (server endpoint: validate, write PNGs, write clips)
+              └── LS-D (client: Apply button + callback)
+                    └── LS-E (docs + manual smoke update)
+```
+
+All issues are sequential. LS-A and LS-B could theoretically be one commit, but are
+separated so the Python fork change is reviewable independently.
+
+---
+
+## Validation Plan
+
+### CI-deterministic (must pass on every PR)
+
+1. `npm run typecheck` — no TypeScript errors
+2. `npm run lint` — no ESLint errors
+3. `npm test` — 100+ passing; new tests added in LS-B (3 tests) and LS-C (8+ tests):
+   - LS-B: `getSongProjectPath` — path returned, empty string, timeout rejection
+   - LS-C: slug/clip-name/length logic, PNG decode+write to real tmpdir, 403/409/503 guards,
+     partial failure (one clip OSC failure), re-apply idempotency for PNG write
+4. `npm run build` + `npm run electron:build` — build succeeds
+5. `npm run test:e2e` — 35+ passing; new Playwright tests added in LS-D:
+   - Apply button renders in leadsheet tab (not in lyrics tab)
+   - Button disabled with correct reason at each guard condition
+   - Track picker visible in leadsheet tab
+   - Both "Apply to Ableton" and "Export .zip" buttons coexist in leadsheet tab header
+   - Apply button POST is wired (not 404) — mock fetch check
+
+### Manual smoke only (requires patched Ableton + saved set)
+
+These cannot run in CI. Mark `[MANUAL]` in the PR checklist.
+
+- `[MANUAL]` Run `npm run install:remote-script` → confirm `arrangement_writer_version` handler
+  returns `"ableset-2"` (or any reply) when probed
+- `[MANUAL]` Restart Ableton → re-enable AbletonOSC → app shows no "Remote script not loaded" banner
+- `[MANUAL]` Open a saved Ableton set (`.als` on disk). Load a PDF + stamp pages in the leadsheet tab.
+- `[MANUAL]` Select a `+LYRICS` track. Click "Apply to Ableton". Verify:
+  (a) PNG files appear at `<projectDir>/Lyrics/<slug>/page-N.png`
+  (b) Clips appear in the Arrangement with names `[img:<slug>/page-N.png] [full]` at the correct beats
+  (c) Each clip spans to the next stamp's beat (last clip = DEFAULT_CLIP_LENGTH = 4 beats)
+- `[MANUAL]` Open AbleSet on iPad → verify it reads the live-placed image clips identically
+  to zip-exported clips
+- `[MANUAL]` Re-apply (click "Apply to Ableton" a second time) → PNGs overwritten (no duplicate
+  files), fresh clips added to Arrangement
+- `[MANUAL]` Unsaved set test: open a new unsaved Ableton set → click "Apply to Ableton" →
+  toast reads "Save your Ableton set first"
+- `[MANUAL]` Export .zip button still works after an Apply session (no state corruption)
+- `[MANUAL]` Lyrics tab "Apply to Ableton" still works (no regression)
+
+---
+
+## Known Ambiguities
+
+1. **`song.file_path` in Live's Python LOM**: confirmed available through Ableton LOM
+   documentation and community sources — `Live.Song.Song.file_path` returns an absolute
+   path string for a saved set and `""` for an unsaved one. Not directly testable without
+   Ableton; manual smoke covers it.
+
+2. **AbleSet iPad app timing**: unclear whether AbleSet rescans `Lyrics/` in real time or
+   only on session load. If it only scans on load, the user may need to reload AbleSet
+   after applying. This is a manual-smoke question, not a blocker.
+
+3. **Stamp log image-ref display in LeadsheetView (views.tsx)**: currently shows
+   `[img:page{s.page}.png]` (without the slug), but actual clip names use the slug.
+   This is a cosmetic inconsistency. Not fixed in this feature — tracked as a follow-up.
+
+---
+
+## Data Safety
+
+- PNGs are written to the user's Ableton project directory, which is the intended
+  destination. The server guards against empty project path (unsaved set).
+- No Ableton `.als` file is modified. PNG writes are additive (create or overwrite).
+- `mkdir -p` creates `Lyrics/<slug>/` if absent — standard Ableton project convention.
+- No new `localStorage` keys or `IndexedDB` entries.
+- `vendor/AbletonOSC/abletonosc/song.py` modification is a committed source-code change,
+  not a runtime artifact.
+
+---
+
+# Archive — previous plans
+
+## Feature: live-stamp-write (completed 2026-06-05, PR #32)
+
+_See archived content below._
+
+## ⚠️ REVISION 2026-06-05 — Model 2: proof-then-apply (live-stamp-write)
 
 User decision: the feature is **NOT** real-time per-stamp. It is **proof-then-apply**:
 stamp + edit/proof in the app exactly as today (accumulate `stamps[]`, stamp log, inline
 edit, undo — all unchanged), then press **"Apply to Ableton"** to batch-write every
 proofed clip into the Arrangement at its computed beat in one pass.
 
-**Why:** deleting an *arrangement* clip is not exposed over AbletonOSC, so a wrong live
-per-stamp write is stuck in Ableton; proofing in-app stays reversible, and a batch write
-reuses the existing accumulate→commit flow (same beats the `.als` export already computes).
-
-**What changes vs. the per-stamp sections below:**
-- **DROP** the "Live Stamp ⇄ Export" mode toggle and the per-keystroke wiring (old issue F).
-  `stamp()` is **unchanged** from today (append + cursor advance only).
-- **Server API (issue C)** becomes a **batch** endpoint:
-  `POST /api/live/apply` with `{ trackIndex, clips: [{ name, beat }, ...] }` →
-  writes each clip (scratch slot 0: create → name → duplicate_clip_to_arrangement(beat) →
-  delete), returns `{ written, failed[] }`. (Plus `GET /api/live/tracks` for the picker.)
-- **OSC client (issue B)**: `listTracks`, `probeHandler`, and `writeStampClip(trackIndex, name, beat)`
-  (the per-clip primitive the batch loops over).
-- **Client (issues E/F merged)**: a track-picker + an **"Apply to Ableton" button** next to
-  "Export .zip" (both destinations coexist). On click: gather proofed `stamps[]` → formatted
-  name + beat → `POST /api/live/apply` → result toast ("Wrote N clips" / per-clip failures).
-  Button disabled (with reason) when Ableton disconnected, handler absent, or no track picked.
-- **Banner (issue G)** and **vendor fork + install (issue A)**, **WS handlerStatus (issue D)**,
-  **docs (issue H)** are unchanged in intent.
-
-Everything below this block is the original per-stamp design, retained for context but
-overridden by this revision where they conflict.
-
----
-
-## Feature: live-stamp-write
-
-### Problem
-
-Stamping lyric lines today only accumulates timestamps for an offline `.als` / `.zip`
-export.  The user must finish the song, export, then manually import the project into
-Ableton.  This breaks the live-performance workflow: the director can't see named clips
-appear on the Arrangement timeline in real time as they stamp.
-
-### Goal
-
-When the user stamps a lyric line during live playback, write a named MIDI clip directly
-into the Ableton Arrangement at the current playhead beat — so the clip appears
-immediately, with no export/import step.
-
-The existing `.als` / `.zip` offline export path is kept intact as the
-offline/portable route (e.g. for set prep before a performance).
-
-### Clarification interview
-
-Auto Mode is active and the product decisions are fully specified in the task prompt
-("THREE locked product decisions").  The spike is proven.  No ambiguity requires a
-pause for questions — specific, concrete design answers are given.  This rationale is
-recorded here per the planning-agent discipline instead of running an unnecessary
-interview round.
-
-### Intent + Constraints Pass
-
-1. **What is the user actually trying to accomplish?**  
-   Press ArrowRight → lyric clip appears in the live Ableton Arrangement at the current
-   beat, named with the lyric text, with no export or import step.
-
-2. **Scope and non-goals**  
-   _In scope:_  
-   - OSC layer: new `OscClient` methods (`listTracks`, `writeStampClip`) using the
-     patched AbletonOSC handler  
-   - Server layer: new HTTP endpoints (`GET /api/live/tracks`,
-     `POST /api/live/stamp`)  
-   - Client UI: mode toggle (Live Stamp / Export), track-picker dropdown, stub
-     feedback toasts  
-   - Bundling: vendor the patched AbletonOSC into `vendor/AbletonOSC/`, install
-     script (copies to `~/Music/Ableton/User Library/Remote Scripts/AbletonOSC/`),
-     handler-presence probe  
-
-   _Not in scope (explicit non-goals):_  
-   - Live undo (removing an arrangement clip from inside the app)  
-   - Leadsheet-tab live-stamp (initial scope is lyrics tab only)  
-   - Auto-restart Ableton (the user reloads the remote script themselves)  
-   - Windows / Linux (macOS-only app throughout)  
-   - AbleSet round-trip verification (manual check, out of CI)
-
-3. **Hard constraints**  
-   - Do NOT commit `.env`, Live session data, or user-generated exports (AGENTS.md)  
-   - All work on feature branches; no direct push to `main` (AGENTS.md)  
-   - CI cannot run the Ableton-dependent path; live-write is manual-smoke-only  
-   - Keep existing export + its 63 unit tests and 17 E2E tests intact  
-   - The temp session clip must not clobber user's session clips  
-
-4. **Design tensions**  
-   - **Fast stamps vs. safe scratch slot lifecycle**: using slot 0 is simple but
-     could collide with a user-placed session clip; an "always-empty" high-numbered
-     slot avoids this but requires a probe  
-   - **Bundling a fork vs. upstream drift**: vendoring gives control but requires
-     periodic manual rebasing against upstream AbletonOSC  
-   - **Handler-presence probe**: a reliable in-band probe avoids confusing errors
-     but adds one round-trip per connection
-
-5. **Cheapest path that proves the idea**  
-   The spike already proves the OSC layer.  The minimal slice is:
-   (a) OSC client methods, (b) one server endpoint, (c) mode toggle +
-   `POST /api/live/stamp` from the `stamp()` callback in `app.tsx`.
-   Track-picker and bundled remote-script install are layered on after.
-
----
-
-## Prior Art
-
-The spike (`spike/arrangement-live-write`) produced the key prior-art insight:
-AbletonOSC's `Track.duplicate_clip_to_arrangement(clip, beat)` Python binding is the
-only standard LOM path to place a clip in the Arrangement without an `.als`
-import.  Stock AbletonOSC does not surface it; the spike adds ~6 lines to
-`track.py`.
-
-Key design references:
-- **AbletonOSC upstream** (`github.com/ideoforms/AbletonOSC`) — well-maintained,
-  MIT-licensed; the patch is an additive `add_handler` call that does not touch
-  existing handlers.  Low upstream-drift risk.
-- **Spike test harness** (`spike/arrangement-osc-test.mjs`) — demonstrated the full
-  OSC round-trip: `create_clip` → `set/name` → `duplicate_clip_to_arrangement` →
-  read-back.  Beat 8 confirmed.
-- **OSC read-reply pattern** — `osc-client.ts` already uses a fire-and-forget send
-  + `_handleMessage` reply handler pattern.  The new methods will follow the same
-  pattern with a Promise-wrapped reply waiter (matching the spike's `request()`
-  helper).
-
----
-
-## Design
-
-### 1. Vendor and bundle the patched AbletonOSC
-
-**Repository layout:**
-```
-vendor/
-  AbletonOSC/            ← full fork of ideoforms/AbletonOSC at a pinned commit
-    abletonosc/
-      track.py           ← +6 lines: the duplicate_clip_to_arrangement handler
-    README.md            ← note: "forked from upstream; see docs/ai/decisions.md"
-  .upstream-sha          ← one-line file recording the upstream commit that was forked
-```
-
-**Install script** (`scripts/install-remote-script.mjs`):
-- Source: `vendor/AbletonOSC/`
-- Destination: `~/Music/Ableton/User Library/Remote Scripts/AbletonOSC/`
-  (resolved from `$HOME`; macOS-only)
-- Prompts if the destination already exists (offers overwrite or skip)
-- Exits 0 on success; prints the "Restart Ableton → re-enable AbletonOSC" reminder
-
-**`package.json` script:** `"install:remote-script": "node scripts/install-remote-script.mjs"`
-
-**electron-builder `extraResources`** config: include `vendor/AbletonOSC/` so the
-install script can reference it from the packaged `.app` via `process.resourcesPath`.
-
-**Handler-presence probe** (`OscClient.probeHandler()`):
-- Sends `/live/track/duplicate_clip_to_arrangement` with an intentionally invalid
-  track index (e.g. `9999`) and listens for either an error reply or a timeout.
-- If AbletonOSC replies with an error (any reply), the handler is present.
-- If no reply arrives within 1 s, treat as "handler not loaded".
-- Exposed on `OscClient` as `async probeHandler(): Promise<'present' | 'absent' | 'disconnected'>`.
-- Called once on first connection (`connection` event with `connected: true`);
-  result cached.  Resets on reconnect.
-
-**Version-drift strategy:**
-- `vendor/.upstream-sha` records the upstream commit pinned at vendor time.
-- `docs/ai/decisions.md` records the fork context.
-- A `scripts/check-upstream.mjs` script (optional, not in CI) can compare the
-  vendored SHA against upstream's `main` HEAD to surface new releases.
-
-### 2. Mode toggle: Live Stamp vs. Export
-
-`app.tsx` adds a `liveStampMode` boolean (persisted in `localStorage`).
-
-**Behaviour when `liveStampMode === true`:**
-- `stamp()` calls `POST /api/live/stamp` (new endpoint) in addition to appending
-  to the local `stamps` array.
-- If the selected track index is `null` (no track picked), show a toast "Select a
-  +LYRICS track first" and skip the OSC call.
-- If Ableton is disconnected, show a toast "Ableton not connected" and skip.
-- Export `.als` / `.zip` buttons remain enabled; the mode toggle does not hide them.
-
-**Behaviour when `liveStampMode === false` (default):**
-- `stamp()` behaves exactly as today — append to `stamps`, cursor advance, no OSC.
-
-**Toggle UI:** a small pill toggle in the header (near the export button), label:
-"Live Stamp" / "Export only".  CSS class `live-mode-active` on the app root when
-live stamp mode is on, for styling the stamp preview differently.
-
-### 3. Track-picker UI
-
-**Data flow:**
-- On Ableton connect (`connection` event → WS broadcast → `useLive` in client),
-  `GET /api/live/tracks` is called.
-- Server calls `OscClient.listTracks()` → returns `Array<{ index: number; name: string }>`.
-- Client filters the list to those whose `name` includes `+LYRICS`, presents them
-  in a `<select>` dropdown.  Non-`+LYRICS` tracks are shown (grayed out) so the
-  user can still pick them if needed.
-- The selected track index is stored in React state (`selectedTrackIndex: number | null`).
-- Persisted to `localStorage` as `liveStampTrackIndex` (number or null).
-
-**`GET /api/live/tracks` endpoint** (new in `routes.ts`):
-```
-GET /api/live/tracks
-→ 200: { tracks: Array<{ index: number; name: string }> }
-    or { tracks: [] }  when disconnected
-→ 503: { error: "Ableton not connected" }  (optional; prefer empty array)
-```
-
-**`POST /api/live/stamp` endpoint** (new in `routes.ts`):
-```
-POST /api/live/stamp
-Body: { trackIndex: number; beat: number; clipName: string }
-→ 200: { ok: true; beat: number }   on success
-→ 400: { error: "..." }             on validation failure
-→ 503: { error: "Ableton not connected" }
-→ 500: { error: "..." }             on OSC or internal error
-```
-
-### 4. Server / OSC layer
-
-**`OscClient` additions** (all in `osc-client.ts`):
-
-```typescript
-// Fire and forget — no reply expected.
-createClip(trackIndex: number, slotIndex: number, length: number): void
-
-// Fire and forget — no reply.
-setClipName(trackIndex: number, slotIndex: number, name: string): void
-
-// Promise-resolved on reply or rejects on timeout (2 s default).
-duplicateClipToArrangement(trackIndex: number, slotIndex: number, destBeat: number): Promise<void>
-
-// Returns array of { index, name }.  Resolves on reply (2 s timeout).
-listTracks(): Promise<Array<{ index: number; name: string }>>
-
-// Deletes the session clip in slot slotIndex (fire-and-forget).
-deleteClip(trackIndex: number, slotIndex: number): void
-
-// Probe for handler presence (see §1 above).
-probeHandler(): Promise<'present' | 'absent' | 'disconnected'>
-```
-
-**OSC addresses used:**
-
-| Address | Direction | Purpose |
-|---|---|---|
-| `/live/clip_slot/create_clip` | send | Create temp session clip |
-| `/live/clip/set/name` | send | Name the temp clip |
-| `/live/track/duplicate_clip_to_arrangement` | send+recv | Place named clip in Arrangement |
-| `/live/song/get/num_tracks` | send+recv | Get track count for `listTracks` |
-| `/live/track/get/name` | send+recv | Get name of a specific track |
-| `/live/clip_slot/delete_clip` | send | Clean up temp session clip |
-
-**Scratch slot lifecycle:**
-
-Use **slot index 0** on the selected `+LYRICS` track.  Sequence per stamp:
-1. `create_clip(trackIndex, 0, 1.0)` — 1-beat clip (length doesn't matter; arrangement clip length comes from subsequent stamps or default)
-2. `set/name(trackIndex, 0, clipName)`
-3. `duplicateClipToArrangement(trackIndex, 0, beat)` — wait for reply
-4. `deleteClip(trackIndex, 0)` — fire and forget
-
-**Why slot 0 is acceptable:** the `+LYRICS` track is a dedicated marker track, not
-a performance track.  Slot 0 is immediately cleaned up after duplication.  A
-collision (user has a session clip in slot 0) is surfaced as a "stamp failed" toast
-rather than silently overwriting, because `create_clip` will error if the slot
-already contains a clip.  Handling: catch the error, toast "Stamp failed: slot 0
-busy on selected track", skip the duplication.
-
-**`listTracks()` implementation:**
-The approach from the spike uses `num_tracks` (single int reply) followed by N
-parallel `get/name` requests.  The new implementation uses a single loop:
-`/live/song/get/num_tracks` → N × `/live/track/get/name` in parallel (Promise.all
-with per-request timeout), then assembles the result array.
-
-### 5. Failure modes and UI feedback
-
-| Situation | Behaviour |
-|---|---|
-| Ableton disconnected when Live Stamp mode active | Toast "Ableton not connected — clip not written"; stamp still appended locally |
-| Handler not loaded (probe returns 'absent') | Yellow status banner "Install remote script and restart Ableton"; mode toggle disabled |
-| Slot 0 busy on selected track | Toast "Stamp failed: session slot 0 busy — move or clear the clip in slot 0 of the selected track" |
-| OSC timeout (duplicateClipToArrangement) | Toast "Stamp failed: Ableton timeout" |
-| No track selected | Toast "Select a +LYRICS track first"; stamp appended locally |
-| listTracks times out / returns empty | Track picker shows "(Ableton tracks unavailable)" placeholder |
-
-**Re-stamping the same line:** allowed — each stamp call places a new clip; no
-deduplication.  Two identical clips at the same beat position will coexist in the
-Arrangement (Ableton handles this fine).
-
-**Undo:** `undoStamp(i)` removes the local stamp entry (as today).  It does NOT
-remove the arrangement clip.  The user can undo in Ableton directly (Cmd+Z).
-
-### 6. Handler-presence status in the WS tick message
-
-The `OscClient` already emits `connection` events on the WebSocket.  Extend
-`ws-server.ts` to broadcast a `handlerStatus` field in the tick message so the
-client can show the banner without polling:
-
-```typescript
-// ws broadcast payload (addition only — backward-compatible)
-{
-  ts: number; bpm: number; playing: boolean; /* … existing fields … */
-  handlerStatus?: 'present' | 'absent' | 'unknown';
-}
-```
-
----
-
-## Atomic Issue Breakdown
-
-| # | Title | Scope | Likely files | Acceptance criteria | CI-testable? | Depends on |
-|---|---|---|---|---|---|---|
-| **A** | Vendor AbletonOSC fork + install script | Server / infra | `vendor/AbletonOSC/` (copy from spike), `scripts/install-remote-script.mjs`, `package.json` (`install:remote-script` script, `extraResources` in builder config) | 1. `npm run install:remote-script` copies `vendor/AbletonOSC/` to `~/Music/Ableton/User Library/Remote Scripts/AbletonOSC/` successfully (or prints "exists, skipping" if already present). 2. `electron:dist` build includes `vendor/AbletonOSC/` in the app bundle. | Partial: unit-test the path-construction and copy logic (mock `fs.cpSync`); install to a temp dir in CI. Actual Live load = manual smoke. | none |
-| **B** | OSC client: listTracks, writeStampClip, probeHandler | Server | `server/src/osc-client.ts` | 1. `listTracks()` calls `num_tracks` then N×`get/name`, returns `{index,name}[]`; unit-testable with mock OSC server. 2. `writeStampClip({trackIndex, slotIndex, beat, clipName})` sends `create_clip → set/name → duplicateClipToArrangement → deleteClip` in order; each OSC message contains the correct address and arguments; unit-testable via spy. 3. `probeHandler()` returns `'present'` when any reply arrives within 1 s, `'absent'` on timeout, `'disconnected'` when `connected === false`. | Partial: OSC message construction, argument values, and promise resolution/rejection are unit-testable. Actual Ableton I/O = manual smoke only. | none |
-| **C** | Server API: GET /api/live/tracks + POST /api/live/stamp | Server | `server/src/routes.ts`, `server/src/index.ts` (wire OscClient into handleRequest), `shared/types.ts` (new type exports) | 1. `GET /api/live/tracks` returns `{tracks: [{index,name}]}` or `{tracks:[]}` when disconnected; 400 if body present (GET should have no body); 200 always (never 503 — prefer empty array). 2. `POST /api/live/stamp` with `{trackIndex:0, beat:8, clipName:"Amazing grace"}` returns `{ok:true, beat:8}`. 3. `POST /api/live/stamp` with missing `trackIndex` → 400 with `error` field. 4. `POST /api/live/stamp` when connected===false → 503. | Unit/integration: mock OscClient in route tests. Live OSC = manual smoke. | B |
-| **D** | WS: broadcast handlerStatus in tick | Server | `server/src/ws-server.ts`, `server/src/osc-client.ts` | 1. When `OscClient` emits `connection({connected:true})`, `probeHandler()` is called; result is broadcast in the next tick payload as `handlerStatus`. 2. On reconnect, `handlerStatus` resets to `'unknown'` until probe completes. 3. Tick payload is backward-compatible (existing fields unchanged). | Unit-testable (mock probe result, inspect broadcast payload). | B |
-| **E** | Client: mode toggle + track-picker state | Client | `client/src/app.tsx` | 1. Toggle button in header: label "Live Stamp" when active, "Export only" when inactive; persisted to `localStorage` as `liveStampMode`. 2. Track-picker `<select>` populated by `GET /api/live/tracks` on Ableton connect (or on toggle enable); `+LYRICS` entries highlighted; non-`+LYRICS` entries shown but grayed. 3. Selected track index persisted as `liveStampTrackIndex`. 4. When Live Stamp active + no track selected: toast "Select a +LYRICS track first". 5. Export buttons remain visible and functional regardless of mode. | CI: E2E test (Playwright) checks toggle render, localStorage persistence, and track picker rendering with mock API response. No Ableton needed for UI tests. | C, D |
-| **F** | Client: stamp() calls live-stamp path | Client | `client/src/app.tsx` | 1. When `liveStampMode===true` + track selected + Ableton connected: `stamp()` fires `POST /api/live/stamp` in addition to appending the local stamp. 2. On success: toast "Clip written at Bar.Beat". 3. On 503 (disconnected): toast "Ableton not connected — clip not written"; local stamp still appended. 4. On 500 / timeout: toast "Stamp failed: <error>"; local stamp still appended. 5. When `liveStampMode===false`: `stamp()` is unchanged from today. | CI: unit test for the `stamp()` branching logic via mock fetch. Manual smoke: Ableton required for live-write confirmation. | E |
-| **G** | Client: handler-not-loaded warning banner | Client | `client/src/app.tsx`, `client/src/views.tsx` | 1. When `handlerStatus === 'absent'` and Live Stamp mode is on: a non-blocking banner appears above the lyric view reading "Remote script not loaded — run `npm run install:remote-script` and restart Ableton". 2. Banner disappears when `handlerStatus === 'present'`. 3. Live Stamp toggle is disabled (grayed) while `handlerStatus === 'absent'`. 4. Export path is unaffected. | CI: Playwright test verifies banner renders when `handlerStatus:'absent'` is in the WS tick fixture. | D, E |
-| **H** | Update testing-guide.md + manual smoke checklist | Docs | `docs/ai/testing-guide.md` | 1. Manual smoke checklist includes: install remote script, enable in Ableton, stamp a lyric, verify clip appears in Arrangement with correct name and beat position, verify AbleSet reads the clip. | N/A — doc-only issue | A–G |
-
-### Dependency order
-
-```
-A (vendor) ──────────────────────────────────────────────────────────────┐
-B (OSC methods) ───────────────────────────────────────────────────────┐ │
-                                                                         ↓ ↓
-C (server API)  ←── B                                                    H (docs)
-D (WS status)   ←── B
-E (client UI)   ←── C, D
-F (stamp path)  ←── E
-G (banner)      ←── D, E
-```
-
-A and B can be implemented in parallel. C and D can run in parallel after B.
-E–G are sequential.
-
----
-
-## Validation Plan
-
-### CI-deterministic (all of these must pass on every PR):
-
-1. `npm run typecheck` — no TypeScript errors
-2. `npm run lint` — no ESLint errors
-3. `npm test` — 63+ unit tests; new tests for:
-   - Issue B: OSC message construction for `listTracks`, `writeStampClip`, `probeHandler`
-   - Issue C: route-level validation (mock OscClient)
-   - Issue F: `stamp()` branching logic (mock fetch)
-4. `npm run build` and `npm run electron:build` — build succeeds
-5. `npm run test:e2e` — 17+ Playwright tests; new tests for:
-   - Issue E: toggle render, track-picker populated by mock endpoint
-   - Issue G: banner render when `handlerStatus:'absent'` in WS fixture
-
-### Manual smoke only (requires patched Ableton):
-
-These cannot run in CI. Mark with `[MANUAL]` in the PR checklist.
-
-- `[MANUAL]` Run `npm run install:remote-script` → confirm `~/Music/Ableton/User Library/Remote Scripts/AbletonOSC/abletonosc/track.py` is updated
-- `[MANUAL]` Restart Ableton → re-enable AbletonOSC → confirm handler is loaded (no errors in Ableton log)
-- `[MANUAL]` App connects to Ableton; track picker shows the `+LYRICS` track
-- `[MANUAL]` Enable Live Stamp mode → select track → stamp a lyric line → clip appears in Arrangement at the correct beat with correct name
-- `[MANUAL]` AbleSet iPad app reads the live-placed clip identically to `.als`-generated clips
-- `[MANUAL]` Undo stamp locally → arrangement clip remains in Ableton (expected; Cmd+Z in Ableton removes it)
-- `[MANUAL]` With Live Stamp OFF: arrow-key stamp → no OSC call, existing behaviour unchanged
-- `[MANUAL]` With Ableton disconnected in Live Stamp mode → toast fires, local stamp appended, no crash
-
----
-
-## Known Ambiguities
-
-None that block implementation.  The following are documented for awareness:
-
-- **AbleSet reads live-placed clips:** The spike did not confirm whether AbleSet's
-  iOS app ingests clips placed live by `duplicate_clip_to_arrangement` identically
-  to clips from an `.als` import.  This is a manual smoke item (issue H); if it
-  fails, a follow-up spike is needed to understand AbleSet's clip-discovery timing.
-- **Arrangement clip length:** `duplicate_clip_to_arrangement` copies the session
-  clip's length into the arrangement.  The temp session clip is always 1 beat.
-  The resulting arrangement clip is therefore 1 beat regardless of the distance
-  to the next stamp.  This is the simplest approach; a follow-up can retroactively
-  stretch the previous clip when the next stamp arrives.
-- **Slot 0 collision:** The plan uses slot 0 on the selected track and cleans it up
-  immediately.  If the user has a clip in slot 0, the stamp will fail with a toast.
-  A follow-up can scan for an empty slot.
-
----
-
-## Data Safety
-
-- `vendor/AbletonOSC/` is committed source code, not a user artifact.  Safe to commit.
-- The install script writes to `~/Music/Ableton/…`; it does NOT modify the user's
-  current Ableton set or any `.als` file.
-- `localStorage` keys added: `liveStampMode` (boolean), `liveStampTrackIndex` (number|null).
-  These are app-internal flags, not user data.
-- No new files are committed to `.gitignore`-excluded areas.
-
----
-
-# Archive — previous plans
-
-## Issue 1: Electron wrapper (completed 2026-06-02)
-
-Goal: wrap in electron-vite for standalone `.app` distribution.  Completed; PR open on `issue-1-electron-wrapper`.
-
-## Server-side session storage (completed 2026-06-05)
-
-Goal: origin-independent named sessions via server filesystem.  
-verification-gate PASS 2026-06-05; awaiting commit + PR.
+_(Full original plan content retained in git history — see commit d6ebc87.)_
