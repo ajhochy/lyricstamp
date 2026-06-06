@@ -79,6 +79,7 @@ describe('installRemoteScript', () => {
   it('copies the tree and writes the version marker to dest', () => {
     writeSource('ableset-2');
     const r = installRemoteScript({ sourceDir, userLibDir });
+    expect(r.createdRemoteScriptsDir).toBe(true);
     expect(r.installed).toBe(true);
     expect(r.installedVersion).toBe('ableset-2');
     const dest = path.join(userLibDir, 'Remote Scripts', 'AbletonOSC');
@@ -89,7 +90,8 @@ describe('installRemoteScript', () => {
   it('backs up an existing install before overwriting', () => {
     writeSource('ableset-2');
     installRemoteScript({ sourceDir, userLibDir });
-    installRemoteScript({ sourceDir, userLibDir });
+    const second = installRemoteScript({ sourceDir, userLibDir });
+    expect(second.createdRemoteScriptsDir).toBe(false);
     const rsDir = path.join(userLibDir, 'Remote Scripts');
     const baks = fs.readdirSync(rsDir).filter((n) => n.startsWith('AbletonOSC.bak-'));
     expect(baks.length).toBeGreaterThanOrEqual(1);
@@ -107,9 +109,10 @@ describe('installRemoteScript', () => {
 
   it('throws userlib-missing when the User Library is absent', () => {
     writeSource('ableset-2');
+    const call = () => installRemoteScript({ sourceDir, userLibDir: path.join(tmp, 'gone') });
+    expect(call).toThrow(RemoteScriptError);
     try {
-      installRemoteScript({ sourceDir, userLibDir: path.join(tmp, 'gone') });
-      throw new Error('should have thrown');
+      call();
     } catch (e) {
       expect((e as RemoteScriptError).code).toBe('userlib-missing');
     }
