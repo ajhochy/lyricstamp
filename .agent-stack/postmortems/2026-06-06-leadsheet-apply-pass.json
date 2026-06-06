@@ -1,0 +1,24 @@
+{
+  "run_id": "2026-06-06-leadsheet-apply-pass",
+  "issue": 36,
+  "date": "2026-06-06",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": false,
+  "summary": "Leadsheet 'Apply to Ableton' (PR #36) manual smoke PASSED. After re-installing the updated fork (ableset-2 with /live/song/get/project_path) while Ableton was closed, the handler loaded automatically (handlerStatus: present confirmed via WS tick). User ran the full flow in the leadsheet tab: PNGs written to Lyrics/<slug>/page-N.png in the project dir + arrangement clips at the stamp beats, AbleSet reads them. No divergence — built first-try-correct as a replica of the lyrics live-apply + the zip export's file layout.",
+  "criteria_results": [
+    { "criterion_id": "ls-pngs", "text": "Page PNGs written to <project>/Lyrics/<slug>/page-N.png", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "User-confirmed; reuses zip-export slug/layout." },
+    { "criterion_id": "ls-clips", "text": "Arrangement clips [img:<slug>/page-N.png] [full] at stamp beats, span to next", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "Reuses writeStampClip + DEFAULT_CLIP_LENGTH; clip-name format copied verbatim from zip export." },
+    { "criterion_id": "ls-projpath", "text": "project_path fork handler resolves the saved set's dir; unsaved → 409", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "New handler loaded after reinstall; handlerStatus present." }
+  ],
+  "process_issues": [
+    { "process_category": "P1", "description": "Adding a new fork handler requires users to re-run install:remote-script + relaunch Ableton. Installing while Ableton is CLOSED is the clean path (loads on next launch, no toggle). Documented in manual-smoke.md.", "detected_by": "manual-smoke" }
+  ],
+  "workflow_adherence": {
+    "expected_chain": ["workflow-orchestrator", "planning-agent", "coding-agent", "verification-gate", "manual-smoke", "failure-postmortem"],
+    "observed_chain": ["workflow-orchestrator (Skill)", "planning-agent (subagent)", "coding-agent x2 (server+fork LS-A/B/C, client LS-D)", "verification-gate PASS (133 unit, 47 e2e build+packaged, screenshot)", "manual-smoke PASS", "failure-postmortem (this)"],
+    "skipped_skills": [],
+    "issues": [],
+    "overall_score": "strict"
+  }
+}
