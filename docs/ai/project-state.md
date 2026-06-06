@@ -13,6 +13,7 @@ Shipped & merged to main: PR #25 (Electron wrapper + session storage), PR #32 (l
 - Out-of-scope flags: committed `Ableset Lyrics Sync.zip` artifact; untracked `assets/icon.icns`+`icon.png` the build depends on (latent CI-release risk)
 
 ## Recently completed
+- **Public user guide + download Worker** (2026-06-06, branch `workflow/lyricstamp-manual-guide`): `docs/manual/index.html` (self-contained guide mirroring the Rhythm/Statement pattern, teal LyricStamp branding, sticky TOC/search, reading progress, lightbox, back-to-top, responsive) + `app-icon.png` + 6 real screenshots in `docs/manual/screenshots/` (captured via committed `scripts/capture-manual-screenshots.mjs`). `worker/staff-guide.js` serves assets via ASSETS and proxies `/download/mac` to the latest GitHub release `.dmg` (`pickMacDmg` tolerates legacy `AbleSet.Sync-*.dmg` + future `LyricStamp-*.dmg`, universal>arm64; optional `GITHUB_WORKER_TOKEN` with public fallback). `wrangler.jsonc` = `lyricstamp-guide`, **PUBLIC (no Access), `workers_dev: true`**. Not deployed — see decisions.md (2026-06-06) + testing-guide.md. **Pending: deploy (`npx wrangler deploy`) + optional `wrangler secret put GITHUB_WORKER_TOKEN --name lyricstamp-guide` to reuse the sibling guides' token value.**
 - Initial app built: client (Vite/React) + server (Node.js HTTP/WS/OSC) fully functional in dev mode
 - Brainstorming + design approved for Electron wrapper using electron-vite (Option A)
 - **Issue 1**: Electron wrapper (electron-vite + electron-builder) implemented
