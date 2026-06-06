@@ -66,5 +66,13 @@ High-level summary:
 - Leadsheet `.zip` export opens correctly in AbleSet iPad app
 - Packaged `.app` / DMG: Electron window loads UI without "Not found" error (production static-serving path)
 
+## Notarization
+
+Local `electron:dist` skips notarization (no Apple credentials) — the `afterSign` hook logs
+`[notarize] no credentials in env — skipping notarization (local build)` and exits cleanly.
+
+Notarization runs in CI on version-tag pushes (`release-electron.yml`). See
+**`docs/release-notarization.md`** for the 5 required GitHub secrets and how to trigger a release.
+
 ## CI status
 No GitHub Actions configured. All checks run locally.

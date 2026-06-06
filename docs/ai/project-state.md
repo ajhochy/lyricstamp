@@ -3,11 +3,13 @@
 _Last updated: 2026-06-05_
 
 ## Current focus
-**live-stamp-write (proof-then-apply)** — implemented A–H and verified (verification-gate PASS 2026-06-05, commit `6609be4`). "Apply to Ableton" batch-writes proofed stamps into the live Arrangement via a bundled, patched AbletonOSC (`/live/track/duplicate_clip_to_arrangement` + `arrangement_writer_version` probe); `.als` export coexists. **Pending: manual Ableton smoke, then open PR → main.** PR #25 (Electron wrapper + server-side session storage) merged to main 2026-06-05.
+**macOS notarization** (PR #34, branch `feat/notarize`) — wired an `afterSign` hook (`scripts/notarize.cjs`) that notarizes + staples via notarytool API key; `mac.notarize:false` stops electron-builder double-submitting; the custom `sign.cjs` only signed. **Proven end-to-end locally 2026-06-05:** build→sign→notarize→staple, `spctl -a` → "accepted, source=Notarized Developer ID". All 5 GitHub secrets set (working **Team** key `9XHDX3ZN44` / issuer `0ec65016-…`; the individual key `R9WYMTP5I5DS` 401'd — see `docs/release-notarization.md`). Pending: mark PR #34 ready + (optional) tag-push CI release test.
+
+Previously shipped & merged to main 2026-06-05: PR #25 (Electron wrapper + server-side session storage), PR #32 (live-stamp-write proof-then-apply).
 
 ## Active branch / PR
-- Branch: `feat/live-stamp-write` (off merged main `054b717`); commits e7ad999 (plan) → cdba8d2 (server B–D) → 924e0d7 (client E–G) → 6609be4 (install A+H)
-- PR: not yet opened (manual merge required)
+- Branch: `feat/notarize` (off main `d6ebc87`); commit `fce005b`+ (notarize hook) → PR #34
+- PR #34: open (draft until ready); merge manual
 
 ## Recently completed
 - Initial app built: client (Vite/React) + server (Node.js HTTP/WS/OSC) fully functional in dev mode
@@ -46,6 +48,28 @@ _Last updated: 2026-06-05_
 ---
 
 ## Recent coding-agent runs
+
+### 2026-06-05 — afterSign notarization hook
+- Files modified:
+  - `scripts/notarize.cjs` (NEW) — electron-builder `afterSign` hook; no-ops when Apple credentials absent; API-key path preferred, Apple-ID fallback; staples ticket after notarization
+  - `scripts/notarize.test.mjs` (NEW) — 3 vitest tests: no-op when no creds (darwin), no-op on non-darwin, throws when .app missing but creds present
+  - `package.json` (EDIT) — added `"afterSign": "scripts/notarize.cjs"` to `build`; added `"notarize": false` to `build.mac` to disable electron-builder's built-in notarize path
+  - `docs/release-notarization.md` (NEW) — documents 5 GitHub secrets, how to obtain each, `gh secret set` commands, how to trigger a release, and local build behaviour
+  - `docs/ai/testing-guide.md` (EDIT) — added Notarization section with pointer to release-notarization.md
+  - `docs/ai/decisions.md` (EDIT) — added dated entry explaining double-notarize risk and `notarize: false` rationale
+- Checks run:
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (117 tests: 100 prior + 17 new — 3 notarize hook tests + new total from prior run)
+  - `npm run electron:dist` — PASS; logged `[notarize] no credentials in env — skipping notarization (local build)` and `skipped macOS notarization reason=`notarize` options were set explicitly `false``
+- Decisions made:
+  - Set `"mac": { "notarize": false }` to disable electron-builder 26's built-in `notarizeIfProvided()` — both the afterSign hook and the built-in path detect the same `APPLE_API_KEY*` env vars; without `false`, both would run and double-submit to Apple's notary service. See `docs/ai/decisions.md` 2026-06-05 entry.
+  - `@electron/notarize` v2.5.0 uses `notarytool` path (not deprecated `altool`); API params are `{ appPath, appleApiKey, appleApiKeyId, appleApiIssuer }` — no `appBundleId` or `tool` param needed.
+  - Stapling via `xcrun stapler staple` runs inside the same try/catch as `notarize()` so a staple failure fails the build (not silently skipped).
+- Deviations from spec: none
+- Concerns:
+  - `@electron/notarize` is a transitive dep (via electron-builder) — not listed in package.json `devDependencies`. If electron-builder is ever removed or its version changes the transitive dep could disappear. Low risk in the short term; a follow-up can pin it directly.
+  - Local signing still uses the developer's personal keychain (SHA-1 fingerprint in `sign.cjs`). Notarization won't work locally even if creds were set because the sign step in `sign.cjs` requires the Developer ID cert in the keychain — this is expected; notarize is CI-only.
 
 ### 2026-06-05 — "Create new +LYRICS track" option (Model 2 increment)
 - Files modified:

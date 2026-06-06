@@ -1,0 +1,23 @@
+{
+  "run_id": "2026-06-05-notarization",
+  "issue": 34,
+  "date": "2026-06-05",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": true,
+  "summary": "Wired macOS notarization (afterSign hook + notarytool API key) and proved it end-to-end locally: build → sign (keychain Developer ID) → afterSign notarize submit → staple → spctl 'accepted, source=Notarized Developer ID'. One repair cycle: the first API key tried (ApiKey_R9WYMTP5I5DS, an App Store Connect *Individual* key) returned HTTP 401 against the team Issuer ID; switching to a *Team* key (AuthKey_9XHDX3ZN44) authenticated and notarization succeeded. All 5 GitHub secrets set (the 2 notary secrets updated to the working team key).",
+  "criteria_results": [
+    { "criterion_id": "notarize-hook", "text": "afterSign hook notarizes + staples when creds present, no-ops locally otherwise", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "Hook ran, submitted, stapled; no-op path verified earlier without creds." },
+    { "criterion_id": "notarize-gatekeeper", "text": "Packaged .app passes Gatekeeper as Notarized Developer ID", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "stapler validate OK; spctl -a -> accepted, source=Notarized Developer ID." }
+  ],
+  "process_issues": [
+    { "process_category": "P1", "description": "Release/deploy credential mismatch: an App Store Connect *Individual* key (ApiKey_ prefix) was tried first and 401'd against the team Issuer ID; notarization requires a *Team* key with >= Developer role. Lesson now in docs/release-notarization.md troubleshooting. Verify keys with `notarytool history` before wiring secrets.", "detected_by": "manual-smoke" }
+  ],
+  "workflow_adherence": {
+    "expected_chain": ["workflow-orchestrator", "pre-flight-release-audit", "coding-agent", "verification-gate", "manual-smoke", "failure-postmortem"],
+    "observed_chain": ["workflow-orchestrator (Skill)", "Pre-Flight #4 static release audit (found 0 secrets + custom-sign-hook gap)", "coding-agent (afterSign hook)", "verification-gate PASS", "real notarization smoke (401 repair -> pass)", "failure-postmortem (this)"],
+    "skipped_skills": [],
+    "issues": [],
+    "overall_score": "strict"
+  }
+}
