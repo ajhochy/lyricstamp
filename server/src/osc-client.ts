@@ -49,6 +49,8 @@ const ADDR_HANDLER_VERSION = '/live/track/arrangement_writer_version';
 // Create-track addresses (Model 2 — "New +LYRICS track" option)
 const ADDR_CREATE_MIDI_TRACK = '/live/song/create_midi_track';
 const ADDR_SET_TRACK_NAME = '/live/track/set/name';
+// Leadsheet-apply: project path (LS-B)
+const ADDR_SONG_PROJECT_PATH = '/live/song/get/project_path';
 
 const CREATE_TRACK_SETTLE_MS = 150; // brief settle after fire-and-forget create
 
@@ -412,6 +414,24 @@ export class OscClient extends EventEmitter<OscClientEvents> {
     this._oscSend(ADDR_SET_TRACK_NAME, newIndex, name);
 
     return { index: newIndex, name };
+  }
+
+  /**
+   * Return the Ableton project directory (dirname of the set's file_path).
+   * Returns `""` when the set has not been saved yet (Live returns an empty
+   * string for file_path of an unsaved set).
+   *
+   * Sends `/live/song/get/project_path` (new fork handler in LS-A) and
+   * awaits the reply `[address, path]`.
+   */
+  async getSongProjectPath(): Promise<string> {
+    const reply = await this._request(
+      ADDR_SONG_PROJECT_PATH,
+      [],
+      ADDR_SONG_PROJECT_PATH,
+    );
+    const path = reply[1];
+    return typeof path === 'string' ? path : '';
   }
 
   private _sendWithValue(address: string, value: number): void {

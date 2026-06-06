@@ -253,6 +253,51 @@ describe('OscClient.createLyricsTrack', () => {
 });
 
 // ---------------------------------------------------------------------------
+// getSongProjectPath (LS-B)
+// ---------------------------------------------------------------------------
+
+describe('OscClient.getSongProjectPath', () => {
+  it('returns the project path string from the reply', async () => {
+    const mock = makeMock();
+    mock.queueReply('/live/song/get/project_path', [
+      '/live/song/get/project_path',
+      '/Users/ajhochy/Music/Ableton/Great Things Project',
+    ]);
+
+    const result = await mock.getSongProjectPath();
+    expect(result).toBe('/Users/ajhochy/Music/Ableton/Great Things Project');
+    expect(mock.sent[0].address).toBe('/live/song/get/project_path');
+  });
+
+  it('returns "" when the reply contains an empty string (unsaved set)', async () => {
+    const mock = makeMock();
+    mock.queueReply('/live/song/get/project_path', ['/live/song/get/project_path', '']);
+
+    const result = await mock.getSongProjectPath();
+    expect(result).toBe('');
+  });
+
+  it('rejects on timeout (no reply)', async () => {
+    const mock = makeMock();
+    // No reply queued — should time out.
+    const origRequest = (mock as unknown as {
+      _request: (addr: string, args: unknown[], replyAddr: string, timeout?: number) => Promise<unknown[]>;
+    })._request.bind(mock);
+
+    vi.spyOn(
+      mock as unknown as {
+        _request: (addr: string, args: unknown[], replyAddr: string, timeout?: number) => Promise<unknown[]>;
+      },
+      '_request',
+    ).mockImplementation((addr, args, replyAddr, _timeout) =>
+      origRequest(addr, args, replyAddr, 10), // 10 ms for speed
+    );
+
+    await expect(mock.getSongProjectPath()).rejects.toThrow(/timeout/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // probeHandler
 // ---------------------------------------------------------------------------
 

@@ -49,6 +49,36 @@ Previously shipped & merged to main 2026-06-05: PR #25 (Electron wrapper + serve
 
 ## Recent coding-agent runs
 
+### 2026-06-05 — LS-A/LS-B/LS-C (leadsheet-apply server+fork group)
+- Files modified:
+  - `vendor/AbletonOSC/abletonosc/song.py` (EDIT) — added `/live/song/get/project_path` handler returning `os.path.dirname(song.file_path)` or `""` when unsaved; additive, no existing handler changed; `import os` was already present
+  - `vendor/AbletonOSC/abletonosc/track.py` (EDIT) — bumped `arrangement_writer_version` from `"ableset-1"` to `"ableset-2"` to signal the new project-path handler is present
+  - `server/src/osc-client.ts` (EDIT) — added `ADDR_SONG_PROJECT_PATH` constant; added `getSongProjectPath(): Promise<string>` method using existing `_request` pattern
+  - `server/src/routes.ts` (EDIT) — added `mkdir`/`writeFile` imports from `node:fs/promises`; added `join` import from `node:path`; added `writePagePng()` helper; added `handlePostApplyLeadsheet()` handler for `POST /api/live/apply-leadsheet`; wired into dispatcher
+  - `server/src/osc-client.test.ts` (EDIT) — added 3 `getSongProjectPath` tests: path returned, empty string, timeout rejects
+  - `server/src/routes.test.ts` (EDIT) — added `getSongProjectPath`/`songProjectPath` to `MockOsc` interface and `makeMockOsc`; added `fs`/`os`/`path` imports; added 11 tests for `POST /api/live/apply-leadsheet` covering: 503 null, 503 disconnected, 409 unsaved, 400 bad trackIndex, 400 bad pages, 400 bad stamps, 400 invalid pngDataUrl, PNG writes to correct paths with correct bytes, clip name format matches zip export exactly, last clip DEFAULT_CLIP_LENGTH, stamps sorted by ts, partial failure, re-apply overwrite
+- Checks run:
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (133 tests: 100 prior + 3 getSongProjectPath + ~11 apply-leadsheet + 19 routes total up from prior; osc-client total 14 up from 11)
+  - `npm run build` — PASS
+- Decisions made:
+  - Clip name format in `handlePostApplyLeadsheet` copied verbatim from `handlePostExportZip`'s `leadsheetClips` build: `` `[img:${slug}/page-${stamp.page}.png] [full]` `` — same `slugify` function, same `page-N.png` naming, same `[full]` suffix. Tests assert the exact string so live == export.
+  - `getSongProjectPath` is called AFTER body validation (503 check, 400 checks) so we only hit OSC when we know the body is valid. This matches the style of `handlePostLiveApply`.
+  - Stamps are sorted by `ts` before building clips (spec says "sorted by ts"). Images are written before clips so they exist on disk before Ableton tries to read the clip names.
+  - `pageBuffers` deduplicates pages by page number (same page can appear in multiple stamps — picks first pngDataUrl, matching zip export's dedup behavior).
+  - `imagesWritten` counts unique pages actually written (not total stamps), `clipsWritten` counts successful OSC clip writes.
+- Deviations from spec:
+  - Spec body uses `stamps: Array<{ page: number, ts: number }>` — implemented as specified. The plan's design section also shows this shape.
+  - Response shape is `{ imagesWritten, clipsWritten, failed }` rather than `{ written, failed }` from the plan's early design — "imagesWritten" and "clipsWritten" are more descriptive and match the spec dispatch prompt exactly.
+  - `pdfName` validated as non-empty string (400 if empty/missing) — spec doesn't enumerate this but it's needed to compute the slug.
+- Concerns:
+  - `getSongProjectPath` is called after body validation. If the set gets unsaved between validation and the OSC call, the 409 fires correctly. No race condition concern.
+  - `writePagePng` uses `mkdir -p` (recursive: true) which is safe on re-apply. The `writeFile` overwrites. Standard Node.js behavior — no data loss concern.
+  - The `join` import from `node:path` was added alongside existing `resolve`/`extname` — no conflict.
+
+
+
 ### 2026-06-05 — afterSign notarization hook
 - Files modified:
   - `scripts/notarize.cjs` (NEW) — electron-builder `afterSign` hook; no-ops when Apple credentials absent; API-key path preferred, Apple-ID fallback; staples ticket after notarization

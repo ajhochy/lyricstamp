@@ -264,6 +264,17 @@ class SongHandler(AbletonOSCHandler):
         self.osc_server.add_handler("/live/song/cue_point/set/name", partial(song_cue_point_set_name, self.song))
 
         #--------------------------------------------------------------------------------
+        # ABLESET-LYRICS-SYNC: return the project directory (dirname of set file_path).
+        # Returns empty string when the set has not been saved yet.
+        #   /live/song/get/project_path  →  reply: (path_string,)
+        #--------------------------------------------------------------------------------
+        def song_get_project_path(_params):
+            fp = self.song.file_path
+            return (os.path.dirname(fp) if fp else "",)
+
+        self.osc_server.add_handler("/live/song/get/project_path", song_get_project_path)
+
+        #--------------------------------------------------------------------------------
         # Listener for /live/song/get/beat
         #--------------------------------------------------------------------------------
         self.last_song_time = -1.0
