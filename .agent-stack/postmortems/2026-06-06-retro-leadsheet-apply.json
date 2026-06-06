@@ -1,0 +1,31 @@
+{
+  "run_id": "2026-06-06-retro-leadsheet-apply",
+  "issue": 36,
+  "date": "2026-06-06",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": false,
+  "criteria_results": [],
+  "process_issues": [
+    {
+      "process_category": "release-deploy",
+      "description": "Adding a fork OSC handler requires users to re-run install:remote-script + relaunch Ableton. Mitigated cleanly by installing while Ableton was CLOSED (loads on next launch, no toggle). Documented in manual-smoke.md.",
+      "detected_by": "manual-smoke"
+    }
+  ],
+  "summary": "Adherence retro for the leadsheet 'Apply to Ableton' run (PR #36). CLEAN/STRICT run: orchestrator entry → upfront alignment → planning-agent → 2 coding-agents → verification-gate (133 unit, 47 e2e build+packaged, screenshot) → manual smoke PASS first try → failure-postmortem. No repair loops, no W-violations. Notable: BOTH skill improvements from the two prior retros were followed and worked — (1) coding-agents returned validation reports (not premature project-state rewrites), and (2) verification-gate Required Evidence #9 (packaged-runtime parity) was honored (ran test:e2e:build against the real .app for a renderer change). The self-improvement loop is functioning: fixes landed last retro prevented their target failure classes this run.",
+  "workflow_adherence": {
+    "expected_chain": ["workflow-orchestrator", "planning-agent", "coding-agent", "verification-gate", "manual-smoke", "failure-postmortem"],
+    "observed_chain": [
+      "workflow-orchestrator (Skill, upfront alignment block)",
+      "planning-agent (subagent; investigated project-path mechanism, chose fork handler)",
+      "coding-agent x2 (server+fork LS-A/B/C, client LS-D — both returned validation reports per the 2026-06-05 coding-agent fix)",
+      "verification-gate (Skill; typecheck/lint/133 unit/build + test:e2e:build packaged #9 + leadsheet screenshot)",
+      "manual-smoke PASS (live PNG-write + clips + AbleSet; fork installed while Ableton closed)",
+      "failure-postmortem (pass)"
+    ],
+    "skipped_skills": [],
+    "issues": [],
+    "overall_score": "strict"
+  }
+}
