@@ -76,3 +76,46 @@ Notarization runs in CI on version-tag pushes (`release-electron.yml`). See
 
 ## CI status
 No GitHub Actions configured. All checks run locally.
+
+## Public user guide + download Worker (`docs/manual/`, `worker/`, `wrangler.jsonc`)
+
+The static LyricStamp user guide lives in `docs/manual/index.html` (self-contained HTML/CSS/JS,
+mirrors the Rhythm / Statement Automator guide pattern) with `app-icon.png` and real app
+screenshots under `docs/manual/screenshots/`. A Cloudflare Worker (`worker/staff-guide.js`,
+deployed via `wrangler.jsonc` as `lyricstamp-guide`) serves the static assets and a
+`/download/mac` route that resolves the latest GitHub release `.dmg`. **This site is PUBLIC —
+no Cloudflare Access** (LyricStamp is local-only with no cloud data).
+
+### Regenerate screenshots
+```bash
+node scripts/capture-manual-screenshots.mjs
+```
+Spawns the dev server (`dev:server` + Vite on 127.0.0.1:3000) against an isolated temp data
+dir, drives the app with Playwright's bundled Chromium, and writes the six manual screenshots
+(lyrics view, ChordPro setup, stamp log, sessions menu, track picker, leadsheet). No Ableton
+required — every captured view renders without an OSC connection.
+
+### Preview / verify the manual locally
+```bash
+# Static render (no Worker): any static server pointed at docs/manual
+npx serve docs/manual    # then open the printed URL
+
+# Full Worker (download route) — needs Cloudflare wrangler + auth:
+npx wrangler dev         # serves the guide + /download/mac locally
+curl -i http://localhost:8787/             # 200, HTML guide
+curl -i http://localhost:8787/download/mac # 302 to a GitHub release asset (or text error)
+```
+Manual render checklist (what a render check should confirm): page loads with no console
+errors; every `<img>` has `naturalWidth > 0`; exactly one link with `href="/download/mac"`;
+layout holds at mobile (~390px) and desktop (~1280px) widths.
+
+### Download token (`GITHUB_WORKER_TOKEN`)
+The Worker uses the **same** read-only, Contents-scoped fine-grained GitHub token the Rhythm and
+Statement Automator guides use. It is **optional** here: if unset, the Worker falls back to the
+public GitHub Releases API. Cloudflare does not expose secret *values* for copying, so to reuse
+the existing token value on this Worker, set it explicitly (never commit it):
+```bash
+printf '%s' "$GITHUB_WORKER_TOKEN" | npx wrangler secret put GITHUB_WORKER_TOKEN --name lyricstamp-guide
+```
+The Worker tolerates both the legacy `AbleSet.Sync-<ver>-arm64.dmg` asset name and future
+`LyricStamp-*.dmg` names, preferring universal > arm64 > any `.dmg`.

@@ -1,0 +1,30 @@
+{
+  // Cloudflare Workers deploy for the LyricStamp user guide.
+  // `npx wrangler deploy` publishes the contents of docs/manual as a static
+  // site, fronted by worker/staff-guide.js.
+  // - Static assets (index.html at /, app-icon.png, screenshots/, etc.) are
+  //   served directly from the ASSETS binding.
+  // - /download/mac is handled by the Worker, which proxies the desktop app's
+  //   latest macOS .dmg from the GitHub release. If the optional
+  //   GITHUB_WORKER_TOKEN secret is set (`wrangler secret put`, never committed)
+  //   it's used server-side; otherwise the Worker falls back to the public
+  //   GitHub Releases API.
+  "name": "lyricstamp-guide",
+  "main": "worker/staff-guide.js",
+  "compatibility_date": "2026-05-30",
+  // PUBLIC guide — unlike the Rhythm / Statement guides there is NO Cloudflare
+  // Access in front of this site. LyricStamp is local-only with no cloud data,
+  // so the *.workers.dev URL is intentionally left enabled for easy sharing
+  // with other churches.
+  "workers_dev": true,
+  "assets": {
+    "directory": "./docs/manual",
+    "binding": "ASSETS"
+  }
+  // TODO (optional): to serve from a custom public domain instead of
+  // <name>.<subdomain>.workers.dev, add a route here and create the DNS record
+  // in Cloudflare, e.g.:
+  //   "routes": [{ "pattern": "lyricstampguide.example.com", "custom_domain": true }]
+  // Do NOT put this hostname behind Cloudflare Access — the guide is meant to be
+  // publicly reachable.
+}
