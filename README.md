@@ -66,3 +66,15 @@ Run through these seven checks after initial setup:
 - **Same machine required.** The app communicates with Ableton over localhost OSC. Running the browser on a separate machine is not supported.
 - **No session persistence.** Closing the browser tab loses all loaded songs and stamps. Export before closing — the `.als` or `.zip` is the source of truth.
 - **ChordPro subset.** The parser handles common directives (`title`, `key`, `tempo`, sections, lyric lines). Exotic ChordPro extensions may not parse correctly.
+
+## License
+
+AbleSet Sync is licensed under the **[PolyForm Noncommercial License 1.0.0](LICENSE.md)**.
+
+In plain terms:
+
+- ✅ **Free to use, copy, modify, and share** for any *noncommercial* purpose — personal use, churches and other noncommercial organizations, education, and research.
+- ❌ **No commercial use or resale.** You may not sell the software, sell access to it, or use it to make money, without a separate commercial license.
+- ℹ️ This is a *source-available, noncommercial* license — **not** an OSI "open source" license (open-source licenses permit commercial use, which this intentionally does not).
+
+For commercial licensing, contact the copyright holder. Third-party components bundled with the app keep their own licenses — see [NOTICE.md](NOTICE.md) (notably the vendored AbletonOSC fork, which is MIT-licensed).
