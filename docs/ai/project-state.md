@@ -1,15 +1,16 @@
-# Project State — ableset-lyrics-sync
+# Project State — LyricStamp (repo slug: lyricstamp; data dir stays ableset-lyrics-sync)
 
-_Last updated: 2026-06-05_
+_Last updated: 2026-06-06_
 
 ## Current focus
-**leadsheet "Apply to Ableton"** (branch `feat/leadsheet-apply`) — the PDF/leadsheet analog of the lyrics live-apply. Proof-then-apply: stamp PDF pages → pick `+LYRICS` track → Apply writes `Lyrics/<slug>/page-N.png` into the live set's project dir + arrangement clips `[img:<slug>/page-N.png] [full]` spanning to next stamp. New vendored-fork handler `/live/song/get/project_path` resolves the project dir (`""` unsaved → 409 "Save your Ableton set first"). Coexists with the `.zip` export. Verified: typecheck/lint, 133 unit, 47 e2e (build + packaged `.app`), leadsheet-tab screenshot. **Pending: open PR + manual Ableton smoke (re-run `install:remote-script` for the new handler, saved set required).**
+**Rebrand "AbleSet Sync" → "LyricStamp"** (branch `workflow/rebrand-lyricstamp`, stacked on `chore/add-license`). Display-only: `package.json` name→`lyricstamp`, productName→`LyricStamp`, appId→`com.lyricstamp`; UI wordmark/title/Electron dialogs+logs/`README`/`NOTICE`; `scripts/e2e-app.mjs` resolves `LyricStamp.app` (+ robust binary-from-bundle-name fallback); e2e wordmark assertion → `LyricStamp`. **Data-safety KEEPS (must not rename):** Electron `userData` is now explicitly pinned to the original `<appData>/ableset-lyrics-sync` dir (so the appId/name change does NOT move the session store), `session-store.ts` `appName='ableset-lyrics-sync'`, localStorage prefix `ableset-sync.` / IndexedDB `ableset-sync`, and the `ableset-2` `arrangement_writer_version` handshake. References to **AbleSet** (the iPad app) stay as factual integration. Doc scope was visible-surface-only (`docs/ai/*`, `HANDOFF*`, `design/` NOT swept). Verified PASS: typecheck/lint, 133 unit, build, `electron:dist` (signed `LyricStamp.app` + dmg/zip), 47 packaged-app e2e. **Pending: GitHub repo rename (`ableset-lyrics-sync`→`lyricstamp`) + local dir rename + PR review/merge.**
 
-Shipped & merged to main 2026-06-05: PR #25 (Electron wrapper + session storage), PR #32 (lyrics live-apply), PR #34 (macOS notarization), PR #35 (release publish fix). Release **v0.1.0** drafted (signed + notarized DMG via CI).
+Shipped & merged to main: PR #25 (Electron wrapper + session storage), PR #32 (lyrics live-apply), PR #34 (notarization), PR #35 (release publish fix), **PR #36 (leadsheet "Apply to Ableton")**. **v0.1.1 published** (signed+notarized, Latest); v0.1.0 left as stale draft. License **PR #39** (PolyForm Noncommercial 1.0.0) open.
 
 ## Active branch / PR
-- Branch: `feat/leadsheet-apply` (off main `c7768c4`); commits 3768279 (plan) → a35e9bc (server+fork LS-A/B/C) → eca24d1 (client LS-D) → 9ba0991 (docs LS-E)
-- PR #34: open (draft until ready); merge manual
+- Branch: `workflow/rebrand-lyricstamp` (stacked on `chore/add-license`); merge manual
+- License: PR #39 `chore/add-license` → main (open)
+- Out-of-scope flags: committed `Ableset Lyrics Sync.zip` artifact; untracked `assets/icon.icns`+`icon.png` the build depends on (latent CI-release risk)
 
 ## Recently completed
 - Initial app built: client (Vite/React) + server (Node.js HTTP/WS/OSC) fully functional in dev mode

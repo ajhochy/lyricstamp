@@ -1,6 +1,6 @@
-# AbleSet Sync
+# LyricStamp
 
-AbleSet Sync is a local-only macOS web tool for worship music directors. It bridges Ableton Live (via AbletonOSC) with a browser UI where the director stamps each lyric line or leadsheet page to the current playback position. The output is an Ableton `.als` project file with MIDI clips pre-positioned at those stamped times, ready for use with the AbleSet iPad app.
+LyricStamp is a local-only macOS web tool for worship music directors. It bridges Ableton Live (via AbletonOSC) with a browser UI where the director stamps each lyric line or leadsheet page to the current playback position. The output is an Ableton `.als` project file with MIDI clips pre-positioned at those stamped times, ready for use with the AbleSet iPad app.
 
 ## Prerequisites
 
@@ -69,7 +69,7 @@ Run through these seven checks after initial setup:
 
 ## License
 
-AbleSet Sync is licensed under the **[PolyForm Noncommercial License 1.0.0](LICENSE.md)**.
+LyricStamp is licensed under the **[PolyForm Noncommercial License 1.0.0](LICENSE.md)**.
 
 In plain terms:
 

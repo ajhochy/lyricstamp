@@ -1,5 +1,5 @@
 {
-  "name": "ableset-lyrics-sync",
+  "name": "lyricstamp",
   "version": "0.1.1",
   "description": "Local macOS tool for worship music directors to sync lyrics/leadsheets with Ableton Live",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -29,8 +29,8 @@
     "install:remote-script": "node scripts/install-remote-script.mjs"
   },
   "build": {
-    "appId": "com.ableset-lyrics-sync",
-    "productName": "AbleSet Sync",
+    "appId": "com.lyricstamp",
+    "productName": "LyricStamp",
     "directories": {
       "output": "dist"
     },

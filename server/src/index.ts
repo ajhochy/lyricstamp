@@ -39,7 +39,7 @@ export async function start(): Promise<void> {
     server.once('error', reject);
     server.listen(PORT, HOST, () => {
       server.off('error', reject);
-      console.log(`AbleSet Sync server listening on :${PORT}`);
+      console.log(`LyricStamp server listening on :${PORT}`);
       console.log(`WebSocket endpoint: ws://${HOST}:${PORT}/live`);
       resolve();
     });
