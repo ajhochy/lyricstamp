@@ -39,12 +39,12 @@ test.describe('remote-script setup checklist', () => {
     await expect(page.locator('[data-step="install"] .rss-hint')).toContainText(/Open Ableton Live once/i);
   });
 
-  test('step 1 is marked done when up to date', async ({ page }) => {
+  test('hides the install button when up to date', async ({ page }) => {
     await mockStatus(page, { ...BASE, installed: true, installedVersion: 'ableset-2', upToDate: true });
     await page.goto('/');
     await page.waitForSelector('.workspace', { timeout: 15000 });
-    if (await page.locator('.remote-script-setup').count()) {
-      await expect(page.locator('[data-step="install"]')).toHaveClass(/done/);
-    }
+    // Whether the whole panel collapsed (all 3 steps green) or it's still visible
+    // with step 1 done, the "Install/Update" button must not be present.
+    await expect(page.locator('[data-step="install"] button')).toHaveCount(0);
   });
 });

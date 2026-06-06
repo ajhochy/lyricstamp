@@ -40,7 +40,7 @@ export function RemoteScriptSetup({ connected, handlerStatus }: Props): JSX.Elem
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(userLibPath ? { userLibPath } : {}),
         });
-        const data = (await res.json()) as { error?: string; code?: string };
+        const data = (await res.json()) as { error?: string };
         if (!res.ok) {
           setError(data.error ?? 'Install failed');
         }
@@ -56,8 +56,12 @@ export function RemoteScriptSetup({ connected, handlerStatus }: Props): JSX.Elem
 
   const onInstallClick = useCallback(async () => {
     if (status && !status.userLibFound && window.lyricstamp) {
+      setBusy(true);
       const chosen = await window.lyricstamp.chooseAbletonFolder();
-      if (!chosen) return;
+      if (!chosen) {
+        setBusy(false);
+        return;
+      }
       await install(chosen);
       return;
     }
