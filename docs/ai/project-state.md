@@ -3,12 +3,12 @@
 _Last updated: 2026-06-05_
 
 ## Current focus
-**macOS notarization** (PR #34, branch `feat/notarize`) — wired an `afterSign` hook (`scripts/notarize.cjs`) that notarizes + staples via notarytool API key; `mac.notarize:false` stops electron-builder double-submitting; the custom `sign.cjs` only signed. **Proven end-to-end locally 2026-06-05:** build→sign→notarize→staple, `spctl -a` → "accepted, source=Notarized Developer ID". All 5 GitHub secrets set (working **Team** key `9XHDX3ZN44` / issuer `0ec65016-…`; the individual key `R9WYMTP5I5DS` 401'd — see `docs/release-notarization.md`). Pending: mark PR #34 ready + (optional) tag-push CI release test.
+**leadsheet "Apply to Ableton"** (branch `feat/leadsheet-apply`) — the PDF/leadsheet analog of the lyrics live-apply. Proof-then-apply: stamp PDF pages → pick `+LYRICS` track → Apply writes `Lyrics/<slug>/page-N.png` into the live set's project dir + arrangement clips `[img:<slug>/page-N.png] [full]` spanning to next stamp. New vendored-fork handler `/live/song/get/project_path` resolves the project dir (`""` unsaved → 409 "Save your Ableton set first"). Coexists with the `.zip` export. Verified: typecheck/lint, 133 unit, 47 e2e (build + packaged `.app`), leadsheet-tab screenshot. **Pending: open PR + manual Ableton smoke (re-run `install:remote-script` for the new handler, saved set required).**
 
-Previously shipped & merged to main 2026-06-05: PR #25 (Electron wrapper + server-side session storage), PR #32 (live-stamp-write proof-then-apply).
+Shipped & merged to main 2026-06-05: PR #25 (Electron wrapper + session storage), PR #32 (lyrics live-apply), PR #34 (macOS notarization), PR #35 (release publish fix). Release **v0.1.0** drafted (signed + notarized DMG via CI).
 
 ## Active branch / PR
-- Branch: `feat/notarize` (off main `d6ebc87`); commit `fce005b`+ (notarize hook) → PR #34
+- Branch: `feat/leadsheet-apply` (off main `c7768c4`); commits 3768279 (plan) → a35e9bc (server+fork LS-A/B/C) → eca24d1 (client LS-D) → 9ba0991 (docs LS-E)
 - PR #34: open (draft until ready); merge manual
 
 ## Recently completed
