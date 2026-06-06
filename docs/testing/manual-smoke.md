@@ -166,13 +166,17 @@ Requires a Mac where the patched script is not already current.
 
 ### Packaged-app preload gate (verify on the .dmg build, not dev)
 
-The folder picker relies on an Electron preload bundled inside `app.asar`. Verify
-it actually loads in the packaged app:
+The folder picker relies on the Electron preload (`window.lyricstamp`). To guarantee
+it loads in the packaged app, the preload is **unpacked from the asar** via
+`"asarUnpack": ["out/preload/**"]` in `package.json` `build` (electron-builder places
+it under `app.asar.unpacked/out/preload/`; Electron resolves the `app.asar/...` path to
+it transparently). This is a confirmation step, not an expected failure:
 
 6. In the packaged `.dmg` build, with `~/Music/Ableton/User Library` renamed so the
    default path is missing, the step-① button MUST read **"Locate your Ableton
-   folder…"**. If it instead reads **"Open Ableton Live once, then retry."**, the
-   preload did NOT load from the asar — `window.lyricstamp` is undefined. Fix by
-   adding `"asarUnpack": ["out/preload/**"]` to the `build` block in `package.json`,
-   rebuild, and re-verify. (In dev-browser mode the "Open Ableton Live once" text is
-   expected and correct — this gate is specifically about the packaged app.)
+   folder…"** (proving `window.lyricstamp` is defined). If it instead reads **"Open
+   Ableton Live once, then retry."** the preload still isn't loading — first confirm
+   `app.asar.unpacked/out/preload/preload.mjs` exists in the build, then check the
+   `BrowserWindow` `preload:` path resolution in `electron/main.ts`. (In dev-browser
+   mode "Open Ableton Live once" is expected and correct — this gate is packaged-app
+   only.)
