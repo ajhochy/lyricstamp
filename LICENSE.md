@@ -2,7 +2,7 @@
 
 <https://polyformproject.org/licenses/noncommercial/1.0.0>
 
-Required Notice: Copyright © 2026 ajhochy (https://github.com/ajhochy)
+Required Notice: Copyright © 2026 Aaron Hochhalter (https://github.com/ajhochy)
 
 ## Acceptance
 
