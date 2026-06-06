@@ -23,19 +23,21 @@ const HEALTH_TIMEOUT_MS = 30_000;
 /** Resolve the packaged app binary, preferring the arch-specific output dir. */
 function resolveAppBinary() {
   const candidates = [
-    'dist/mac-arm64/AbleSet Sync.app',
-    'dist/mac/AbleSet Sync.app',
-    'dist/AbleSet Sync.app',
+    'dist/mac-arm64/LyricStamp.app',
+    'dist/mac/LyricStamp.app',
+    'dist/LyricStamp.app',
   ];
   for (const rel of candidates) {
-    const bin = join(rel, 'Contents/MacOS/AbleSet Sync');
+    const bin = join(rel, 'Contents/MacOS/LyricStamp');
     if (existsSync(bin)) return bin;
   }
-  // Fallback: first *.app under dist/.
+  // Fallback: first *.app under dist/. The Mach-O binary inside an Electron
+  // .app is named after productName, so derive it from the bundle dir name
+  // (keeps this robust across product renames).
   if (existsSync('dist')) {
     for (const entry of readdirSync('dist')) {
       if (entry.endsWith('.app')) {
-        const bin = join('dist', entry, 'Contents/MacOS/AbleSet Sync');
+        const bin = join('dist', entry, 'Contents/MacOS', entry.replace(/\.app$/, ''));
         if (existsSync(bin)) return bin;
       }
     }

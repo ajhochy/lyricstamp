@@ -15,3 +15,11 @@
 - **Criteria affected**: .als export opens in Live, ChordPro chord display, stamp preview UX
 - **Root cause**: acceptance-contract was skipped before coding-agent; all acceptance criteria were implicit, untested, and discovered only at manual smoke
 - **Suggested fix**: Enforce acceptance-contract dispatch before every coding-agent; add an Ableton Live file-open smoke step and a ChordPro render check to the contract for any issue touching .als export or lyrics display
+
+## 2026-06-06 — Rebrand LyricStamp — display-only rename, data-safety pin held
+
+- **Result**: smoke PASS (verification claimed PASS; no divergence)
+- **Category**: none (clean) — one non-P process note: brand-rename-incompleteness
+- **Criteria affected**: visible rename ✓; session survival across appId/name change ✓ (5/5 sessions)
+- **Root cause**: stale bare-substring 'Sync' assertion in packaged-app e2e (not caught by brand-phrase grep; caught by Required Evidence #9)
+- **Suggested fix**: for renames, grep the test suite for the bare display substring, or rely on packaged-app e2e as the catch (worked here)

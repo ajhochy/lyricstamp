@@ -1,4 +1,4 @@
-// app.tsx — AbleSet Sync main app component
+// app.tsx — LyricStamp main app component
 import {
   useState,
   useEffect,
@@ -867,7 +867,7 @@ export function App() {
         <div className="wordmark">
           <span className="dot" />
           <span className="name">
-            AbleSet<span className="dim"> Sync</span>
+            Lyric<span className="dim">Stamp</span>
           </span>
         </div>
 

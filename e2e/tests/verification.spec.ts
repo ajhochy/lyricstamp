@@ -185,7 +185,7 @@ test.describe('App — general health', () => {
 
     const header = page.locator('.wordmark .name');
     await expect(header).toBeVisible({ timeout: 5000 });
-    await expect(header).toContainText('Sync');
+    await expect(header).toContainText('LyricStamp');
   });
 
   test('404 returns JSON error for unknown endpoints', async ({ request }) => {

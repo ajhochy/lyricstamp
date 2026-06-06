@@ -1,4 +1,4 @@
-// AbleSet Sync — icons (inline SVG, hairline)
+// LyricStamp — icons (inline SVG, hairline)
 import React from 'react';
 
 type IconProps = { name: string; size?: number } & React.SVGAttributes<SVGSVGElement>;
