@@ -11,6 +11,11 @@
  * unit-tested against a temp filesystem without touching ~/Music.
  */
 
+// NOTE: The canonical install logic also lives in server/src/remote-script.ts
+// (used by the in-app installer). This CLI keeps its own copyTree/shouldSkip
+// because it runs via `node` and can't import the TS module. Keep the copy
+// rules (shouldSkip, backup-then-copy) in sync across the two files.
+
 import fs from 'node:fs';
 import path from 'node:path';
 

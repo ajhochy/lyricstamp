@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>LyricStamp — User Guide</title>
+<link rel="icon" type="image/png" href="app-icon.png"/>
+<link rel="apple-touch-icon" href="app-icon.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    /* Ink field + raised neutrals (matches the LyricStamp dark UI) */
+    --ink:#16191D; --ink-1:#1A1E23; --ink-2:#1E232A; --ink-3:#262C34;
+    /* Warm off-white foreground — never pure white */
+    --fg:#F2F4F6; --fg-2:#B3B8BE; --fg-3:#868C93; --fg-4:#666C73;
+    /* Hairlines */
+    --rule:rgba(242,244,246,.10); --rule-2:rgba(242,244,246,.16); --rule-3:rgba(242,244,246,.30);
+    /* Accent — LyricStamp teal (the app's signal colour) */
+    --accent:#34C2CE; --accent-bright:#6FE0EA; --accent-deep:#176E78; --accent-tint:rgba(52,194,206,.14); --accent-line:rgba(52,194,206,.38);
+    /* Muted slate (admin) + amber (warnings) + gold (wordmark) */
+    --indigo:#9AB0B6; --indigo-tint:rgba(120,140,146,.20); --indigo-line:rgba(154,176,182,.32);
+    --warn:#E0B25C; --warn-tint:rgba(224,178,92,.10); --warn-line:rgba(224,178,92,.30);
+    --gold:#C9A874;
+    --maxw:1200px;
+    --font:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,'Consolas',monospace;
+    --ls-caps:.16em;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:var(--font);color:var(--fg-2);background:var(--ink);
+    line-height:1.62;font-size:16px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    background-image:radial-gradient(1100px 520px at 78% -8%, rgba(52,194,206,.07), transparent 60%);
+    background-attachment:fixed;}
+  a{color:var(--accent-bright);text-decoration:none}
+  a:hover{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+  ::selection{background:rgba(52,194,206,.30);color:var(--fg)}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 32px}
+
+  svg.ic{fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;width:20px;height:20px;flex:0 0 auto;display:block}
+  svg.ic.lg{width:26px;height:26px;stroke-width:1.5}
+
+  /* reading progress */
+  .progress{position:fixed;top:0;left:0;height:2px;width:0;background:var(--accent);z-index:80;transition:width .12s linear;box-shadow:0 0 12px rgba(52,194,206,.55)}
+
+  /* nameplate bar */
+  .nameplate{border-bottom:1px solid var(--rule);background:rgba(22,25,29,.82);backdrop-filter:blur(8px);position:sticky;top:0;z-index:60}
+  .nameplate .wrap{display:flex;align-items:center;justify-content:space-between;height:46px}
+  .nameplate .mark{font-size:11.5px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--gold)}
+  .nameplate .right{font-size:11.5px;font-weight:500;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--fg-4)}
+
+  /* masthead */
+  header.masthead{padding:54px 0 40px;border-bottom:1px solid var(--rule)}
+  header.masthead .wrap{display:flex;align-items:flex-start;gap:26px}
+  .appicon{width:66px;height:66px;border-radius:16px;overflow:hidden;flex:0 0 auto;border:1px solid var(--rule-2);box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .appicon img{width:100%;height:100%;display:block;object-fit:cover}
+  .mast-eyebrow{font-size:12px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--fg-3);margin:4px 0 12px}
+  header.masthead h1{margin:0;font-size:40px;line-height:1.08;letter-spacing:-.025em;font-weight:700;color:var(--fg)}
+  header.masthead h1 .dim{color:var(--fg-3);font-weight:300}
+  .mast-tag{font-style:italic;font-weight:400;font-size:19px;line-height:1.55;color:var(--fg-2);margin:16px 0 0;max-width:62ch}
+  .mast-rule{width:88px;height:2px;background:var(--accent);margin-top:22px}
+
+  /* layout */
+  .layout{display:grid;grid-template-columns:248px 1fr;gap:60px;align-items:start;padding:40px 0 110px}
+  main{min-width:0;max-width:840px}
+
+  /* sidebar */
+  nav.toc{position:sticky;top:62px;align-self:start;max-height:calc(100vh - 84px);overflow:auto;padding-right:6px}
+  nav.toc::-webkit-scrollbar{width:8px}
+  nav.toc::-webkit-scrollbar-thumb{background:var(--rule-2);border-radius:8px}
+  .search{position:relative;margin-bottom:18px}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--fg-4);width:16px;height:16px}
+  .search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--rule-2);border-radius:9px;background:var(--ink-1);color:var(--fg);font-family:inherit;font-size:13.5px}
+  .search input::placeholder{color:var(--fg-4)}
+  .search input:focus{outline:none;border-color:var(--accent-line);box-shadow:0 0 0 3px var(--accent-tint)}
+  nav.toc .grouplabel{font-size:10.5px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--fg-4);margin:20px 12px 8px;padding-top:16px;border-top:1px solid var(--rule)}
+  nav.toc .grouplabel.first{border-top:0;padding-top:0;margin-top:4px}
+  nav.toc a{display:flex;align-items:center;gap:11px;padding:8px 12px;border-radius:9px;color:var(--fg-2);font-size:13.5px;line-height:1.3;font-weight:450;transition:background .12s,color .12s}
+  nav.toc a:hover{background:var(--ink-1);text-decoration:none;color:var(--fg)}
+  nav.toc a.active{background:var(--accent-tint);color:var(--accent-bright);font-weight:550}
+  nav.toc a .mk{flex:0 0 auto;width:22px;height:22px;display:grid;place-items:center;border-radius:6px;border:1px solid var(--rule-2);font-size:11px;font-weight:600;color:var(--fg-3);font-family:var(--mono)}
+  nav.toc a.active .mk{border-color:var(--accent-line);color:var(--accent-bright);background:rgba(52,194,206,.10)}
+  nav.toc a .mk svg{width:14px;height:14px}
+
+  /* TL;DR overview */
+  .tldr{border:1px solid var(--rule-2);border-radius:14px;background:linear-gradient(180deg,var(--ink-2),var(--ink-1));padding:28px 32px;margin-bottom:46px;position:relative;overflow:hidden}
+  .tldr::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+  .tldr .eyebrow{font-size:11.5px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--accent);margin-bottom:8px}
+  .tldr h2{font-style:italic;font-weight:500;font-size:24px;letter-spacing:-.01em;color:var(--fg);margin:0 0 18px}
+  .tldr ol{margin:0;padding:0;list-style:none;counter-reset:tl;display:grid;gap:13px}
+  .tldr li{counter-increment:tl;position:relative;padding-left:40px;color:var(--fg-2);font-size:15.5px}
+  .tldr li::before{content:counter(tl,decimal-leading-zero);position:absolute;left:0;top:1px;font-family:var(--mono);font-size:12.5px;font-weight:600;color:var(--accent);letter-spacing:.02em}
+  .tldr li b{color:var(--fg);font-weight:600}
+
+  /* sections */
+  section.screen{padding:46px 0;border-top:1px solid var(--rule);scroll-margin-top:64px}
+  section.screen:first-of-type{border-top:0;padding-top:8px}
+  .s-head{display:flex;align-items:flex-start;gap:20px;margin-bottom:6px}
+  .s-index{flex:0 0 auto;font-size:34px;font-weight:300;line-height:1;color:var(--fg-4);letter-spacing:-.02em;width:54px;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+  .s-tile{flex:0 0 auto;width:52px;height:52px;border-radius:13px;border:1px solid var(--rule-2);background:var(--ink-1);display:grid;place-items:center;color:var(--accent)}
+  .s-tile svg{width:24px;height:24px}
+  .s-head .eyebrow{font-size:11.5px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--fg-3);margin-bottom:7px}
+  section.screen h2{margin:0;font-size:27px;line-height:1.18;letter-spacing:-.02em;font-weight:650;color:var(--fg)}
+  .who{display:inline-flex;align-items:center;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:var(--accent-tint);color:var(--accent-bright);border:1px solid var(--accent-line);margin-left:10px;vertical-align:middle;white-space:nowrap}
+  .who.admin{background:var(--indigo-tint);color:var(--indigo);border-color:var(--indigo-line)}
+  .lead{font-size:18px;line-height:1.56;color:var(--fg);margin:18px 0 26px;max-width:64ch;font-weight:400}
+  .lead b{font-weight:600}
+  section.screen h3{font-size:15px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--fg-3);margin:32px 0 12px}
+
+  /* screenshots */
+  figure.shot{margin:0 0 22px;border:1px solid var(--rule-2);border-radius:12px;overflow:hidden;background:var(--ink-2);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  figure.shot img{display:block;width:100%;height:auto;cursor:zoom-in}
+  figure.shot figcaption{padding:11px 16px;font-size:13px;color:var(--fg-3);border-top:1px solid var(--rule)}
+  figure.shot figcaption b{color:var(--fg-2);font-weight:600}
+  .shotrow{display:grid;gap:18px}
+  @media(min-width:760px){.shotrow.two{grid-template-columns:1fr 1fr}.shotrow.two figure{margin-bottom:0}}
+
+  /* methods / concept cards */
+  .methods{display:grid;gap:14px;margin:0 0 6px}
+  @media(min-width:680px){.methods{grid-template-columns:repeat(3,1fr)}}
+  @media(min-width:680px){.methods.two{grid-template-columns:repeat(2,1fr)}}
+  .method{border:1px solid var(--rule-2);border-radius:12px;background:var(--ink-1);padding:18px 18px 20px}
+  .method .mh{display:flex;align-items:center;gap:11px;margin-bottom:10px}
+  .method .mh svg{color:var(--accent)}
+  .method .mh b{font-size:15px;font-weight:600;color:var(--fg)}
+  .method p{margin:0;font-size:14.5px;color:var(--fg-2);line-height:1.55}
+  .method p b{color:var(--fg);font-weight:600}
+
+  /* download buttons */
+  .dlrow{display:flex;flex-wrap:wrap;gap:13px;margin:8px 0 4px}
+  .dlbtn{display:inline-flex;align-items:center;gap:12px;padding:13px 20px;border-radius:11px;background:var(--accent-deep);color:var(--fg);font-weight:600;font-size:14.5px;line-height:1.15;border:1px solid var(--accent-line);transition:background .14s,border-color .14s}
+  .dlbtn:hover{background:#1d8893;border-color:var(--accent);text-decoration:none;color:var(--fg)}
+  .dlbtn svg{color:var(--accent-bright);width:19px;height:19px}
+  .dlbtn .sub{display:block;font-weight:450;opacity:.85;font-size:12px;margin-top:2px;font-family:var(--mono);letter-spacing:.01em}
+
+  /* numbered steps */
+  ol.steps{list-style:none;counter-reset:s;margin:6px 0 4px;padding:0}
+  ol.steps>li{counter-increment:s;position:relative;padding:13px 0 14px 46px;border-bottom:1px solid var(--rule)}
+  ol.steps>li:last-child{border-bottom:0;padding-bottom:2px}
+  ol.steps>li::before{content:counter(s);position:absolute;left:0;top:11px;width:28px;height:28px;border-radius:50%;background:var(--accent-deep);color:var(--fg);font-size:13px;font-weight:700;display:grid;place-items:center;font-family:var(--mono);box-shadow:0 0 0 1px var(--accent-line)}
+  ol.steps b{font-weight:600;color:var(--fg)}
+  ol.steps li>ul{margin:8px 0 2px;padding-left:18px}
+  ol.steps li>ul li{margin:5px 0;font-size:14.5px;color:var(--fg-2)}
+  .ic-inline{display:inline-block;vertical-align:-3px;width:17px;height:17px;color:var(--accent);margin:0 1px}
+
+  kbd,code{font-family:var(--mono);font-size:.84em;background:var(--ink-3);border:1px solid var(--rule-2);border-radius:5px;padding:2px 6px;color:var(--fg)}
+  kbd{font-weight:600}
+  pre.codeblock{margin:10px 0 16px;background:var(--ink-3);border:1px solid var(--rule-2);border-radius:10px;padding:16px 18px;font-family:var(--mono);font-size:12.5px;color:var(--fg);overflow-x:auto;line-height:1.55;white-space:pre-wrap;word-break:normal}
+  pre.codeblock .c{color:var(--fg-4)}
+
+  /* shortcuts table */
+  table.keys{width:100%;border-collapse:collapse;margin:6px 0 4px;font-size:14.5px}
+  table.keys th{text-align:left;font-size:10.5px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--fg-4);padding:0 0 10px;border-bottom:1px solid var(--rule-2)}
+  table.keys td{padding:11px 0;border-bottom:1px solid var(--rule);color:var(--fg-2);vertical-align:top}
+  table.keys td:first-child{width:170px;white-space:nowrap}
+  table.keys tr:last-child td{border-bottom:0}
+
+  /* callouts */
+  .callout{display:flex;gap:14px;border:1px solid var(--rule-2);background:var(--ink-1);border-radius:11px;padding:15px 17px;margin:20px 0;font-size:15px;color:var(--fg-2);line-height:1.55}
+  .callout svg{color:var(--accent);margin-top:1px}
+  .callout .h{font-weight:600;display:block;margin-bottom:3px;color:var(--accent-bright)}
+  .callout.warn{background:var(--warn-tint);border-color:var(--warn-line)}
+  .callout.warn svg{color:var(--warn)}
+  .callout.warn .h{color:var(--warn)}
+  .callout b{color:var(--fg);font-weight:600}
+  .callout code{font-size:.82em}
+
+  /* details */
+  details.more{border:1px solid var(--rule-2);border-radius:11px;margin:18px 0 0;background:var(--ink-1);overflow:hidden}
+  details.more>summary{cursor:pointer;padding:14px 17px;font-weight:550;font-size:14px;list-style:none;color:var(--fg);display:flex;align-items:center;gap:11px}
+  details.more>summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--accent);transition:transform .2s;width:17px;height:17px}
+  details[open]>summary .chev{transform:rotate(90deg)}
+  details.more .body{padding:2px 17px 16px 45px}
+  details.more .body ul{margin:6px 0;padding-left:18px}
+  details.more .body li{margin:7px 0;color:var(--fg-2);font-size:14.5px;line-height:1.55}
+  details.more .body li b{color:var(--fg);font-weight:600}
+  details.more .body figure.shot{margin-top:12px}
+
+  /* FAQ */
+  .grid2{display:grid;gap:12px;margin-top:8px}@media(min-width:720px){.grid2{grid-template-columns:1fr 1fr}}
+  details.faq{border:1px solid var(--rule-2);border-radius:11px;background:var(--ink-1);overflow:hidden;align-self:start}
+  details.faq>summary{cursor:pointer;padding:15px 16px;font-weight:550;font-size:14.5px;list-style:none;color:var(--fg);display:flex;align-items:flex-start;gap:10px}
+  details.faq>summary::-webkit-details-marker{display:none}
+  details.faq>summary .chev{margin-top:2px}
+  details.faq .a{padding:0 16px 15px 42px;color:var(--fg-2);font-size:14px;line-height:1.6}
+  details.faq .a b{color:var(--fg);font-weight:600}
+
+  /* lightbox + toTop */
+  .lightbox{position:fixed;inset:0;background:rgba(10,12,15,.9);display:none;place-items:center;z-index:90;padding:36px;cursor:zoom-out;backdrop-filter:blur(6px)}
+  .lightbox.on{display:grid}
+  .lightbox img{max-width:94vw;max-height:90vh;border-radius:10px;box-shadow:0 24px 80px rgba(0,0,0,.7);border:1px solid var(--rule-2)}
+  .toTop{position:fixed;right:22px;bottom:22px;background:var(--ink-2);color:var(--fg);border:1px solid var(--rule-2);border-radius:999px;padding:10px 16px;font-family:inherit;font-size:13px;font-weight:550;cursor:pointer;display:flex;align-items:center;gap:7px;box-shadow:0 8px 24px rgba(0,0,0,.4);opacity:0;transform:translateY(8px);transition:opacity .2s,transform .2s;pointer-events:none}
+  .toTop.show{opacity:1;transform:none;pointer-events:auto}
+  .toTop:hover{border-color:var(--accent-line);color:var(--accent-bright)}
+  .toTop svg{width:15px;height:15px}
+
+  footer{border-top:1px solid var(--rule);padding:30px 0 60px}
+  footer .wrap{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+  footer .mark{font-size:12px;font-weight:600;letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--gold)}
+  footer .note{font-size:12.5px;color:var(--fg-4)}
+
+  @media(max-width:880px){
+    .layout{grid-template-columns:1fr;gap:0;padding-top:28px}
+    nav.toc{position:static;max-height:none;margin-bottom:30px;padding:18px;border:1px solid var(--rule-2);border-radius:12px;background:var(--ink-1)}
+    main{max-width:none}
+    .wrap{padding:0 22px}
+    header.masthead h1{font-size:32px}
+    table.keys td:first-child{width:auto}
+  }
+  @media print{
+    .nameplate,nav.toc,.toTop,.progress{display:none}
+    body{background:#fff;color:#111}
+    details .a,details .body{display:block}
+    .layout{grid-template-columns:1fr;padding:0}
+    section.screen,.tldr{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<!-- icon sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4.2 V15.5"/><path d="M8.2 11.7 L12 15.5 L15.8 11.7"/><path d="M4.5 14 v3.6 a2 2 0 0 0 2 2 h11 a2 2 0 0 0 2-2 V14"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18 V6.4 l10-2.2 V15.6"/><circle cx="6.6" cy="18" r="2.4"/><circle cx="16.6" cy="15.6" r="2.4"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24"><path d="M9.8 14.2 a3.8 3.8 0 0 1 0-5.4 L12.6 6 a3.8 3.8 0 0 1 5.4 5.4 L16.6 12.8"/><path d="M14.2 9.8 a3.8 3.8 0 0 1 0 5.4 L11.4 18 a3.8 3.8 0 0 1 -5.4 -5.4 L7.4 11.2"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4.5 11 a7.5 7.5 0 0 1 13.7-4.1"/><path d="M19.5 13 a7.5 7.5 0 0 1 -13.7 4.1"/><path d="M15 6.5 L18.2 6.9 L18.6 3.7"/><path d="M9 17.5 L5.8 17.1 L5.4 20.3"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.4" y="4.4" width="17.2" height="15.2" rx="2.2"/><circle cx="8.6" cy="9.4" r="1.6"/><path d="M4 17 L9.4 12 L13 15.2 L16 12.6 L20.4 16.6"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.4 7.2 a2 2 0 0 1 2-2 h4.4 l1.8 2.2 h7.2 a2 2 0 0 1 2 2 v8.4 a2 2 0 0 1 -2 2 H5.4 a2 2 0 0 1 -2 -2 z"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3.4 L21 8 L12 12.6 L3 8 Z"/><path d="M3 12 L12 16.6 L21 12"/><path d="M3 16 L12 20.6 L21 16"/></symbol>
+    <symbol id="i-keyboard" viewBox="0 0 24 24"><rect x="2.6" y="6" width="18.8" height="12" rx="2.2"/><line x1="6" y1="9.6" x2="6" y2="9.6"/><line x1="9" y1="9.6" x2="9" y2="9.6"/><line x1="12" y1="9.6" x2="12" y2="9.6"/><line x1="15" y1="9.6" x2="15" y2="9.6"/><line x1="18" y1="9.6" x2="18" y2="9.6"/><line x1="6" y1="13" x2="6" y2="13"/><line x1="18" y1="13" x2="18" y2="13"/><line x1="8.4" y1="13" x2="15.6" y2="13"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.4"/><line x1="15.8" y1="15.8" x2="21" y2="21"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M4 12.6 L9.4 18 L20 6.2"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.4"/><circle cx="12" cy="7.7" r="0.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3.2 L21.6 20 H2.4 Z"/><line x1="12" y1="9.6" x2="12" y2="14.4"/><circle cx="12" cy="17.4" r="0.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.3 9.4 a2.8 2.8 0 1 1 3.8 2.6 c-.9 .45-1.5 1.05-1.5 2.1"/><circle cx="11.6" cy="17.2" r="0.5" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 5.5 L15.5 12 L9 18.5"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="M12 19 V5.5"/><path d="M6.5 11 L12 5.5 L17.5 11"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5 L19 12 L7 19.5 Z"/></symbol>
+    <symbol id="i-stamp" viewBox="0 0 24 24"><path d="M9.4 3.6 h5.2 l-.9 5.4 a2.4 2.4 0 0 0 .7 2.2 l1.8 1.7 H4.2 l1.8 -1.7 a2.4 2.4 0 0 0 .7 -2.2 z"/><line x1="3.4" y1="16.4" x2="20.6" y2="16.4"/><line x1="6" y1="20.4" x2="18" y2="20.4"/></symbol>
+  </defs>
+</svg>
+
+<div class="nameplate"><div class="wrap">
+  <span class="mark">LyricStamp</span>
+  <span class="right">Worship Director · User Guide</span>
+</div></div>
+
+<header class="masthead"><div class="wrap">
+  <div class="appicon"><img src="app-icon.png" alt="LyricStamp app icon"/></div>
+  <div>
+    <div class="mast-eyebrow">macOS · for Ableton Live</div>
+    <h1>LyricStamp <span class="dim">— User Guide</span></h1>
+    <p class="mast-tag">Stamp your lyrics — or your printed leadsheet pages — to the exact beats of your Ableton Live arrangement, then send them straight into Live so AbleSet shows the right words at the right time. A practical walkthrough for worship directors.</p>
+    <div class="mast-rule"></div>
+  </div>
+</div></header>
+
+<div class="wrap layout">
+  <nav class="toc">
+    <div class="search">
+      <svg class="ic"><use href="#i-search"/></svg>
+      <input id="filter" placeholder="Search the guide…" aria-label="Search the guide"/>
+    </div>
+    <div id="toclinks"></div>
+  </nav>
+
+  <main id="main">
+
+    <div class="tldr">
+      <div class="eyebrow">Overview</div>
+      <h2>What LyricStamp does for you</h2>
+      <ol>
+        <li><b>Load a song</b> — paste ChordPro lyrics, or drop in a PDF leadsheet.</li>
+        <li><b>Play along in Ableton Live</b> and <b>stamp</b> each line or page to the beat as it lands — one arrow-key tap per cue.</li>
+        <li><b>Proof your stamps</b> in the log — nudge, undo, or re-stamp until the timing is right.</li>
+        <li><b>Send it to Live</b> — export an <code>.als</code>/<code>.zip</code>, or click <b>Apply to Ableton</b> to write the cues straight into your open set.</li>
+        <li><b>AbleSet shows the words</b> on your iPad, perfectly in time, while the band plays.</li>
+      </ol>
+    </div>
+
+    <!-- WHAT IT IS / MENTAL MODEL -->
+    <section class="screen" id="overview" data-title="How it fits together" data-nav="How it fits together" data-mark="info">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-info"/></svg></div>
+        <div>
+          <div class="eyebrow">Mental model</div>
+          <h2>How LyricStamp fits together <span class="who">2-min read</span></h2>
+        </div>
+      </div>
+      <p class="lead">LyricStamp is a small <b>Mac app</b> that sits beside Ableton Live. You don't perform from it — you <i>prepare</i> with it. The goal is always the same: get your lyric cues landing on the right beats inside Live, so a tool like <b>AbleSet</b> can display them to the room while the track plays.</p>
+      <div class="methods">
+        <div class="method">
+          <div class="mh"><svg class="ic lg"><use href="#i-music"/></svg><b>LyricStamp</b></div>
+          <p>The Mac app in this guide. You load a song, play along, and <b>stamp</b> lyric lines or leadsheet pages to beats. It runs on your computer only — no accounts, no cloud, nothing leaves your Mac.</p>
+        </div>
+        <div class="method">
+          <div class="mh"><svg class="ic lg"><use href="#i-play"/></svg><b>Ableton Live</b></div>
+          <p>Your backing-track host (<b>Live 11 or newer</b>). LyricStamp reads Live's playback position so your stamps line up with the real arrangement, and can write the finished cues back into your set.</p>
+        </div>
+        <div class="method">
+          <div class="mh"><svg class="ic lg"><use href="#i-layers"/></svg><b>AbleSet</b></div>
+          <p>A separate iPad/web app (made by another company) that reads the lyric cues from your Live set and shows them on stage. LyricStamp's job is to put those cues where AbleSet expects them.</p>
+        </div>
+      </div>
+      <div class="callout"><svg class="ic"><use href="#i-info"/></svg><div><span class="h">Everything stays on your Mac</span>LyricStamp has no login and no online database. Your songs, PDFs, and saved sessions live on your computer. This guide page and the download button are the only things online — and they hold none of your data.</div></div>
+      <div class="callout"><svg class="ic"><use href="#i-check"/></svg><div><span class="h">Two ways to deliver your work</span>Every workflow below ends one of two ways: <b>Export</b> a file you drop into your project folder, or <b>Apply to Ableton</b> to write the cues straight into the set you have open. Apply is faster; Export always works, even with Live closed.</div></div>
+    </section>
+
+    <!-- 1. GET THE DESKTOP APP -->
+    <section class="screen" id="download" data-title="Get the desktop app" data-nav="Get the desktop app" data-mark="download">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-download"/></svg></div>
+        <div>
+          <div class="eyebrow">Setup · step 1</div>
+          <h2>Get the desktop app <span class="who">Everyone · one-time</span></h2>
+        </div>
+      </div>
+      <p class="lead">LyricStamp is a Mac app. Download it once, drag it into your <b>Applications</b> folder, and open it from there.</p>
+      <div class="dlrow">
+        <a class="dlbtn" href="/download/mac"><svg class="ic"><use href="#i-download"/></svg><span>Download for Mac<span class="sub">Latest signed release · .dmg</span></span></a>
+      </div>
+      <ol class="steps">
+        <li>Click <b>Download for Mac</b> above. You'll get a <code>.dmg</code> disk image — the latest release, every time.</li>
+        <li>Open the <code>.dmg</code> and <b>drag the LyricStamp icon onto the Applications folder</b> shown in the window.</li>
+        <li>Open <b>Applications</b> and launch <b>LyricStamp</b>. (Don't run it from inside the disk image — drag it out first.)</li>
+      </ol>
+      <div class="callout"><svg class="ic"><use href="#i-check"/></svg><div><span class="h">Opening it the first time</span>The app is signed and notarized by Apple, so it should open normally. If macOS asks because it was downloaded from the internet, click <b>Open</b> — you only confirm once.</div></div>
+      <div class="callout warn"><svg class="ic"><use href="#i-alert"/></svg><div><span class="h">macOS only</span>LyricStamp is a macOS app. There is no Windows or Linux version. It needs <b>macOS</b> plus <b>Ableton Live 11 or newer</b> running on the same Mac.</div></div>
+      <details class="more"><summary><svg class="ic chev"><use href="#i-chev"/></svg>Getting a newer version later</summary><div class="body">There's no automatic updater. When you hear a new build is out, just <b>come back to this page and click Download for Mac again</b> — it always hands you the latest release. Drag the new copy into Applications, replacing the old one. Your saved sessions stay exactly where they are.</div></details>
+    </section>
+
+    <!-- 2. REMOTE SCRIPT -->
+    <section class="screen" id="remote-script" data-title="Install the remote script" data-nav="Install the remote script" data-mark="repeat">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-repeat"/></svg></div>
+        <div>
+          <div class="eyebrow">Setup · step 2</div>
+          <h2>Install or refresh the Ableton remote script <span class="who">Everyone · one-time</span></h2>
+        </div>
+      </div>
+      <p class="lead">For LyricStamp to talk to Ableton Live, Live needs a small <b>remote script</b> called <b>AbletonOSC</b>. You don't install it by hand — LyricStamp ships with its own patched copy and puts it in place with <b>one click</b>. There's no Terminal and no file-copying involved.</p>
+      <p style="font-size:15px;color:var(--fg-2);margin:0 0 14px;max-width:64ch">When the script isn't installed yet, LyricStamp shows a <b>"Finish connecting LyricStamp to Ableton Live"</b> setup checklist at the top of the window. Work down its three steps — the checklist ticks each one off on its own and disappears once everything's ready.</p>
+      <ol class="steps">
+        <li><b>Click <span style="color:var(--accent-bright)">Install remote script</span>.</b> LyricStamp copies the patched <b>AbletonOSC</b> into your Ableton <b>User Library → Remote Scripts</b> folder (backing up any older copy first). If it can't find your Ableton folder, it shows <b>Locate your Ableton folder…</b> instead — click it and point the picker at your Ableton <i>User Library</i> folder. Step ① turns into a checkmark when it's done.</li>
+        <li><b>Turn it on in Live.</b> In Ableton, open <b>Settings → Link, Tempo &amp; MIDI</b> (older versions: <b>Preferences → Link/Tempo/MIDI</b>), and under <b>Control Surface</b> pick <b>AbletonOSC</b>. Then <b>quit and reopen Ableton Live</b> so it loads the script.</li>
+        <li><b>Watch it confirm itself.</b> When LyricStamp reconnects and sees the patched script, steps ② and ③ tick off automatically and the checklist collapses. That's your proof it worked — nothing else to do.</li>
+      </ol>
+      <div class="callout"><svg class="ic"><use href="#i-info"/></svg><div><span class="h">Why a patched copy?</span>LyricStamp's <b>Apply to Ableton</b> feature needs a couple of extra commands that the standard AbletonOSC script doesn't include. That's why LyricStamp bundles its own version and installs it for you — if you happened to install AbletonOSC some other way, just run the one-click install over it so Apply works.</div></div>
+      <div class="callout"><svg class="ic"><use href="#i-check"/></svg><div><span class="h">Updates are one click too</span>If a LyricStamp update ships a newer remote script, the setup checklist reappears with an <b>Update remote script</b> button. Click it, restart Live, and you're current — no Terminal, ever. The <b>Apply to Ableton</b> button quietly disables itself (with a reason) until the script is installed and current, so you'll always know where you stand.</div></div>
+    </section>
+
+    <!-- 3. CONNECT ABLETON -->
+    <section class="screen" id="connect" data-title="Connect Ableton Live" data-nav="Connect Ableton Live" data-mark="link">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-link"/></svg></div>
+        <div>
+          <div class="eyebrow">Setup · step 3</div>
+          <h2>Connect Ableton Live <span class="who">Everyone</span></h2>
+        </div>
+      </div>
+      <p class="lead">With the remote script installed, connecting is automatic. Start Live, open your set, then open LyricStamp — the top-left badge turns <b>Connected</b> and the transport readout starts following Live's playhead.</p>
+      <figure class="shot"><img src="screenshots/lyrics-view.png" alt="LyricStamp connected to Ableton Live, showing the Connected badge and live transport position"/><figcaption>Top bar — the <b>Connected</b> badge (top-left) and the live <b>bar.beat</b> / <b>BPM</b> / <b>key</b> readout confirm LyricStamp is following Live's playhead.</figcaption></figure>
+      <ol class="steps">
+        <li>Open <b>Ableton Live</b> and load the set you're preparing.</li>
+        <li>Open <b>LyricStamp</b>. Within a second or two the badge should read <b>Connected</b>.</li>
+        <li>Press <b>Play</b> in Live — LyricStamp's position readout (<code>bar.beat</code>) should count along with it. That's your proof the link is live.</li>
+      </ol>
+      <div class="callout warn"><svg class="ic"><use href="#i-alert"/></svg><div><span class="h">Still says "Disconnected"?</span>Confirm Live is running, that <b>AbletonOSC</b> is selected as a Control Surface (step 2), and that you restarted Live after installing the script. A Live restart fixes the large majority of connection problems.</div></div>
+    </section>
+
+    <!-- 4. LYRICS WORKFLOW -->
+    <section class="screen" id="lyrics" data-title="Lyrics workflow (ChordPro)" data-nav="Lyrics workflow" data-mark="music">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-music"/></svg></div>
+        <div>
+          <div class="eyebrow">The main workflow</div>
+          <h2>Lyrics workflow — paste, stamp, send <span class="who">Everyone</span></h2>
+        </div>
+      </div>
+      <p class="lead">The lyrics workflow is the heart of LyricStamp. You paste your song in <b>ChordPro</b> format, play the track in Live, and tap one arrow key to stamp each line to the beat it should appear on. Then you export or apply the result.</p>
+
+      <h3>1 · Paste your song (ChordPro)</h3>
+      <p style="font-size:15px;color:var(--fg-2);margin:0 0 14px;max-width:64ch">Open the <b>Song</b> panel at the top of the Lyrics tab, give the song a name, and paste your lyrics. <b>ChordPro</b> is the plain-text format most worship tools export — chords go in square brackets right before the syllable, like <code>[G]Amazing</code>, and section labels use braces like <code>{start_of_chorus}</code>.</p>
+      <figure class="shot"><img src="screenshots/chordpro-setup.png" alt="The Song setup panel expanded, with ChordPro lyrics pasted into the editor and a Reload song button"/><figcaption>The <b>Song</b> panel expanded — paste ChordPro on the right, then click <b>Reload song</b>. Click the header again to collapse it for a clean stamping view.</figcaption></figure>
+      <ol class="steps">
+        <li>Click the <b>Song</b> header to expand the setup panel.</li>
+        <li>Type a <b>Song name</b> and paste your <b>ChordPro lyrics</b> into the editor.</li>
+        <li>Click <b><svg class="ic-inline"><use href="#i-music"/></svg>Reload song</b>. The lyric lines appear in the main view, ready to stamp.</li>
+        <li>Click the <b>Song</b> header once more to collapse the panel — you don't need it open while you stamp.</li>
+      </ol>
+      <div class="callout"><svg class="ic"><use href="#i-info"/></svg><div><span class="h">Don't have ChordPro?</span>Plain lyrics work too — just paste the words, one line per cue. Chords in <code>[brackets]</code> are kept with the line so they ride along into Live, but they're optional. Section labels like <code>{start_of_verse}</code> simply help you find your place.</div></div>
+
+      <h3>2 · Stamp each line to the beat</h3>
+      <p style="font-size:15px;color:var(--fg-2);margin:0 0 14px;max-width:64ch">This is the part that feels like magic once it clicks. Play the song in Live, watch the <b>NEXT TO STAMP</b> line, and the instant it should appear on screen, tap <kbd>→</kbd>. LyricStamp records the current beat, logs the line, and advances to the next one.</p>
+      <figure class="shot"><img src="screenshots/lyrics-view.png" alt="The main lyrics view while stamping — a large current line, the next-to-stamp preview, and the stamp log filling up on the right"/><figcaption>The stamping view — the big line is what's showing now, <b>NEXT TO STAMP →</b> is what you'll stamp next, and the <b>Stamp Log</b> on the right fills in as you go.</figcaption></figure>
+      <ol class="steps">
+        <li>Make sure LyricStamp says <b>Connected</b> and click once in the main lyric area so the keyboard shortcuts are active.</li>
+        <li>Press <kbd>Space</kbd> to start Live playing (or press Play in Live).</li>
+        <li>As each line is about to be sung, tap <kbd>→</kbd> to <b>stamp &amp; advance</b>. The line drops into the Stamp Log with its beat position.</li>
+        <li>Tapped too early or too late? Tap <kbd>←</kbd> to <b>stamp the previous line again</b>, or fix it in the log (next step).</li>
+      </ol>
+
+      <h3>3 · Proof and edit your stamps</h3>
+      <p style="font-size:15px;color:var(--fg-2);margin:0 0 14px;max-width:64ch">The <b>Stamp Log</b> on the right is your proofing surface. Every stamp shows its beat position and the line text. You can replay the song and watch the cues, undo a mis-timed stamp, and re-stamp it — nothing is committed to Live until you choose to send it.</p>
+      <figure class="shot"><img src="screenshots/stamp-log.png" alt="The stamp log with several entries, each showing a beat position and the stamped lyric line, with undo controls"/><figcaption>The <b>Stamp Log</b> — each row is one cue: its <b>bar.beat</b> position and the line. Hover a row to <b>undo</b> it; the most recent stamp is highlighted.</figcaption></figure>
+      <ul style="margin:6px 0 0;padding-left:20px;color:var(--fg-2);font-size:15px;line-height:1.6">
+        <li><b>Undo a stamp</b> — hover the row in the log and click the undo control. The cursor steps back so you can re-stamp that line.</li>
+        <li><b>Jump to a stamp</b> — click a row to move the cursor there and check the timing against playback.</li>
+        <li><b>Re-stamp</b> — with the cursor on a line, stamp again to overwrite its beat with the current position.</li>
+      </ul>
+
+      <h3>4 · Send it to Ableton</h3>
+      <p style="font-size:15px;color:var(--fg-2);margin:0 0 14px;max-width:64ch">When the timing looks right, you have two ways to deliver it — pick whichever fits the moment.</p>
+      <div class="methods two">
+        <div class="method">
+          <div class="mh"><svg class="ic lg"><use href="#i-layers"/></svg><b>Apply to Ableton</b></div>
+          <p><b>Fastest.</b> Pick a <code>+LYRICS</code> track, click <b>Apply to Ableton</b>, and LyricStamp writes a named clip for every stamp straight into your open Live set's Arrangement. AbleSet reads them immediately. Needs the patched remote script (step 2).</p>
+        </div>
+        <div class="method">
+          <div class="mh"><svg class="ic lg"><use href="#i-download"/></svg><b>Export .als</b></div>
+          <p><b>Always works.</b> Click <b>Export .als</b> to save an Ableton project with the lyric clips already positioned. Open or import it in Live whenever you like — no live connection required.</p>
+        </div>
+      </div>
+      <div class="callout"><svg class="ic"><use href="#i-info"/></svg><div><span class="h">What "Apply" writes</span>Apply to Ableton adds one named MIDI clip per stamp onto the track you chose, each landing on its stamped beat. It never touches your audio or other tracks. Applying again adds a fresh set of clips, so clear the old ones first if you're redoing a song.</div></div>
+    </section>
+
+    <!-- 5. LEADSHEET WORKFLOW -->
+    <section class="screen" id="leadsheet" data-title="Leadsheet workflow (PDF)" data-nav="Leadsheet workflow" data-mark="image">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-image"/></svg></div>
+        <div>
+          <div class="eyebrow">For chart-readers</div>
+          <h2>Leadsheet workflow — stamp PDF pages <span class="who">Everyone</span></h2>
+        </div>
+      </div>
+      <p class="lead">Prefer to put a <b>chart on screen</b> instead of lyric lines? The <b>Leadsheet</b> tab works the same way, but you stamp <i>pages of a PDF</i> to the beat. Each stamp tells Live "show this page from here," so the band sees the right chart page as the song moves.</p>
+      <figure class="shot"><img src="screenshots/leadsheet.png" alt="The Leadsheet tab with the drop-a-PDF empty state, plus Export .zip and Apply to Ableton buttons"/><figcaption>The <b>Leadsheet</b> tab — drop in a PDF to begin. Once loaded, you stamp pages just like lyric lines, then <b>Export .zip</b> or <b>Apply to Ableton</b>.</figcaption></figure>
+      <ol class="steps">
+        <li>Click the <b>Leadsheet</b> tab, then <b>drop in a PDF</b> (or click <b>Select PDF</b>).</li>
+        <li>Play the song in Live. Use <kbd>↑</kbd>/<kbd>↓</kbd> to move between pages and <kbd>Enter</kbd> to <b>stamp the current page</b> to the current beat.</li>
+        <li>Proof the page cues in the <b>Stamp Log</b>, exactly like the lyrics workflow.</li>
+        <li>Deliver it: <b>Export .zip</b> (a folder of page images + a Live project), or <b>Apply to Ableton</b> to write the page cues straight into your open set.</li>
+      </ol>
+      <div class="callout warn"><svg class="ic"><use href="#i-alert"/></svg><div><span class="h">Apply to Ableton needs a saved set</span>To apply leadsheet pages, your Live set must be <b>saved to disk</b> first — LyricStamp writes the page images next to your project file. If the set is unsaved you'll see <i>"Save your Ableton set first."</i> Export .zip has no such requirement.</div></div>
+    </section>
+
+    <!-- 6. SAVED SESSIONS -->
+    <section class="screen" id="sessions" data-title="Saved sessions" data-nav="Saved sessions" data-mark="folder">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-folder"/></svg></div>
+        <div>
+          <div class="eyebrow">Don't lose your work</div>
+          <h2>Saved sessions <span class="who">Everyone</span></h2>
+        </div>
+      </div>
+      <p class="lead">A <b>session</b> bundles everything for one song — the lyrics or PDF, every stamp, and which tab you were on — under a name you choose. Save a session per song and you can reopen any of them later without re-pasting or re-stamping.</p>
+      <figure class="shot"><img src="screenshots/sessions-menu.png" alt="The Sessions menu open, showing a name field, Save, Save as new and New blank buttons, and a saved-sessions list"/><figcaption>The <b>Sessions</b> menu — name and <b>Save</b> the current song, <b>Save as new</b> to branch a copy, or <b>New blank</b> to start fresh. Saved sessions list below for one-click reopening.</figcaption></figure>
+      <ol class="steps">
+        <li>Click <b>Sessions</b> in the top bar to open the menu.</li>
+        <li>Type a name (it defaults to the song name) and click <b>Save</b>. A dot appears next to <b>Sessions</b> while you have a session loaded.</li>
+        <li>Reopen any saved session by clicking its name in the list. Use <b>Save as new</b> to keep the original and branch a copy, or <b>New blank</b> to clear the workspace.</li>
+      </ol>
+      <div class="callout"><svg class="ic"><use href="#i-check"/></svg><div><span class="h">Saved on your Mac</span>Sessions are stored locally by LyricStamp, including the leadsheet PDF. They survive app updates and restarts. Reinstalling the app doesn't erase them.</div></div>
+    </section>
+
+    <!-- 7. +LYRICS TRACK -->
+    <section class="screen" id="track" data-title="Choosing a +LYRICS track" data-nav="Choosing a +LYRICS track" data-mark="layers">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-layers"/></svg></div>
+        <div>
+          <div class="eyebrow">Where the cues land</div>
+          <h2>Choosing or creating a <code>+LYRICS</code> track <span class="who">Everyone</span></h2>
+        </div>
+      </div>
+      <p class="lead">When you <b>Apply to Ableton</b>, the cues have to land on a track. AbleSet looks for a track whose name ends in <code>+LYRICS</code> — so that's the track LyricStamp writes to. The picker in the top bar lets you choose an existing one or make a new one on the spot.</p>
+      <figure class="shot"><img src="screenshots/track-picker.png" alt="The top-bar track picker dropdown next to the Apply to Ableton button"/><figcaption>The <b>track picker</b> (top bar, beside <b>Apply to Ableton</b>) lists the tracks in your open set, plus an option to create a new <code>+LYRICS</code> track.</figcaption></figure>
+      <ol class="steps">
+        <li>With Live <b>Connected</b>, open the <b>track</b> dropdown in the top bar.</li>
+        <li>Pick an existing track whose name ends in <code>+LYRICS</code>, <b>or</b> choose <b>➕ New +LYRICS track…</b> and type a name — LyricStamp adds the <code>+LYRICS</code> tag for you and creates the track in Live.</li>
+        <li>Use the refresh control (<svg class="ic-inline"><use href="#i-repeat"/></svg>) beside the picker if you add a track in Live and want LyricStamp to see it.</li>
+        <li>With a track selected, <b>Apply to Ableton</b> becomes available.</li>
+      </ol>
+      <div class="callout"><svg class="ic"><use href="#i-info"/></svg><div><span class="h">Why the <code>+LYRICS</code> name matters</span>The <code>+LYRICS</code> suffix is AbleSet's signal that a track holds on-screen lyric/page cues rather than audio or MIDI to play. Keep the suffix and AbleSet picks the cues up automatically.</div></div>
+    </section>
+
+    <!-- 8. KEYBOARD SHORTCUTS -->
+    <section class="screen" id="shortcuts" data-title="Keyboard shortcuts" data-nav="Keyboard shortcuts" data-mark="keyboard">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-keyboard"/></svg></div>
+        <div>
+          <div class="eyebrow">Work hands-on-keys</div>
+          <h2>Keyboard shortcuts <span class="who">Reference</span></h2>
+        </div>
+      </div>
+      <p class="lead">Stamping is built around the keyboard so you can keep your eyes on the screen and your hand on the arrows. Click once in the main area first so the shortcuts are active (they pause while you're typing in a text field). The same shortcut bar is always visible along the bottom of the app.</p>
+      <table class="keys">
+        <thead><tr><th>Key</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>Space</kbd></td><td>Play / pause Ableton Live from LyricStamp.</td></tr>
+          <tr><td><kbd>S</kbd></td><td>Stop and return Live to the start.</td></tr>
+          <tr><td><kbd>→</kbd></td><td><b>Lyrics:</b> stamp the current line and advance to the next.</td></tr>
+          <tr><td><kbd>←</kbd></td><td><b>Lyrics:</b> step back and stamp the previous line again.</td></tr>
+          <tr><td><kbd>Enter</kbd></td><td><b>Leadsheet:</b> stamp the current PDF page to the current beat.</td></tr>
+          <tr><td><kbd>↑</kbd> / <kbd>↓</kbd></td><td>Navigate — move between lines (lyrics) or pages (leadsheet).</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Export the current tab (<code>.als</code> for lyrics, <code>.zip</code> for leadsheet).</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Switch between the Lyrics and Leadsheet tabs.</td></tr>
+        </tbody>
+      </table>
+      <div class="callout"><svg class="ic"><use href="#i-info"/></svg><div><span class="h">Shortcuts paused?</span>If the arrow keys aren't stamping, you're probably still focused in the song-name or ChordPro field. Click once in the main lyric/leadsheet area to hand focus back, then try again.</div></div>
+    </section>
+
+    <!-- 9. FAQ -->
+    <section class="screen" id="faq" data-title="Questions &amp; fixes" data-nav="Questions &amp; fixes" data-mark="help">
+      <div class="s-head">
+        <div class="s-tile"><svg class="ic"><use href="#i-help"/></svg></div>
+        <div>
+          <div class="eyebrow">Reference</div>
+          <h2>Questions &amp; fixes</h2>
+        </div>
+      </div>
+      <div class="grid2">
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>The badge says "Disconnected"</summary><div class="a">Make sure <b>Ableton Live is running</b>, that <b>AbletonOSC</b> is selected under <b>Settings → Link, Tempo &amp; MIDI → Control Surface</b>, and that you <b>restarted Live</b> after installing the remote script. A Live restart resolves most connection issues.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>The arrow keys aren't stamping</summary><div class="a">Click once in the <b>main lyric or leadsheet area</b> to give it focus. Shortcuts intentionally pause while your cursor is in a text field (like the song name or ChordPro box).</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>"Apply to Ableton" is greyed out</summary><div class="a">Hover it for the reason. Common causes: not <b>Connected</b>; the patched <b>remote script</b> isn't loaded (use the setup checklist's <b>Install / Update remote script</b> button, then restart Live); no <code>+LYRICS</code> <b>track</b> picked; or <b>no stamps</b> yet. For leadsheets, the set must also be <b>saved to disk</b>.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>"Save your Ableton set first"</summary><div class="a">Leadsheet <b>Apply</b> writes page images next to your project file, so Live needs a saved location. Save the set in Live (<kbd>Cmd</kbd>+<kbd>S</kbd>) and try again — or use <b>Export .zip</b>, which doesn't need a saved set.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>My chords look wrong / aren't showing</summary><div class="a">LyricStamp reads <b>ChordPro</b>: chords in square brackets right before the syllable (<code>[G]Amazing</code>) and sections in braces (<code>{start_of_chorus}</code>). Chords are kept with the line but are optional — plain lyrics, one line per cue, work fine.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>AbleSet isn't showing the lyrics</summary><div class="a">Confirm the cues landed on a track ending in <code>+LYRICS</code> (that's AbleSet's signal). After <b>Apply</b>, you may need to <b>reload the set in AbleSet</b> so it re-scans. AbleSet is a separate app — check its own setup if cues still don't appear.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>I re-applied and now there are duplicate clips</summary><div class="a">Applying adds a <b>fresh</b> set of clips each time rather than replacing the old ones. If you're redoing a song, delete the previous lyric clips on the <code>+LYRICS</code> track in Live before applying again.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>How do I update LyricStamp?</summary><div class="a">There's no auto-updater. <b>Come back to this page and click Download for Mac again</b> — it always gives you the latest release. Drag the new copy into Applications. Your saved sessions are untouched.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>Where does my data live?</summary><div class="a">Entirely on your Mac. LyricStamp has <b>no account and no cloud database</b>. Songs, PDFs, and saved sessions are stored locally; nothing is uploaded. This guide page holds none of your data.</div></details>
+        <details class="faq"><summary><svg class="ic chev"><use href="#i-chev"/></svg>Can I run it on more than one Mac?</summary><div class="a">Yes — download the same <code>.dmg</code> on each Mac. Saved sessions are <b>per-Mac</b> (local), so they don't sync between machines automatically. Re-save or re-import a session on each computer where you need it.</div></details>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="lightbox" id="lightbox"><img id="lightboximg" alt=""/></div>
+<button class="toTop" id="toTop" title="Back to top"><svg class="ic"><use href="#i-arrow-up"/></svg>Top</button>
+
+<footer><div class="wrap">
+  <span class="mark">LyricStamp</span>
+  <span class="note">User guide · screenshots are taken from the live app · macOS · Ableton Live 11+ · AbletonOSC.</span>
+</div></footer>
+
+<script>
+  // ----- build grouped contents -----
+  const ICON = {
+    info:'i-info', download:'i-download', repeat:'i-repeat', link:'i-link',
+    music:'i-music', image:'i-image', folder:'i-folder', layers:'i-layers',
+    keyboard:'i-keyboard', help:'i-help'
+  };
+  const tocEl = document.getElementById('toclinks');
+  const sections = [...document.querySelectorAll('section.screen')];
+  let html = '', refDone = false;
+  sections.forEach(s => {
+    const isRef = (s.dataset.mark === 'keyboard' || s.dataset.mark === 'help');
+    if (isRef && !refDone){ html += '<div class="grouplabel">Reference</div>'; refDone = true; }
+    const mk = s.dataset.mark;
+    const marker = `<span class="mk"><svg class="ic"><use href="#${ICON[mk]||'i-chev'}"/></svg></span>`;
+    html += `<a href="#${s.id}" data-id="${s.id}">${marker}<span class="lbl">${s.dataset.nav}</span></a>`;
+  });
+  tocEl.innerHTML = '<div class="grouplabel first">Contents</div>' + html;
+  const tocMap = new Map([...tocEl.querySelectorAll('a')].map(a => [a.dataset.id, a]));
+
+  // ----- lightbox -----
+  const lb = document.getElementById('lightbox'), lbimg = document.getElementById('lightboximg');
+  document.addEventListener('click', e => {
+    const img = e.target.closest('figure.shot img');
+    if (img) { lbimg.src = img.src; lb.classList.add('on'); }
+    else if (e.target.closest('#lightbox')) lb.classList.remove('on');
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') lb.classList.remove('on'); });
+
+  // ----- scroll-spy -----
+  const obs = new IntersectionObserver(es => es.forEach(en => {
+    if (en.isIntersecting) { tocMap.forEach(a => a.classList.remove('active')); tocMap.get(en.target.id)?.classList.add('active'); }
+  }), { rootMargin: '-12% 0px -78% 0px' });
+  sections.forEach(s => obs.observe(s));
+
+  // ----- search / filter -----
+  document.getElementById('filter').addEventListener('input', e => {
+    const q = e.target.value.trim().toLowerCase();
+    sections.forEach(s => {
+      const hit = !q || s.textContent.toLowerCase().includes(q);
+      s.style.display = hit ? '' : 'none';
+      const a = tocMap.get(s.id); if (a) a.style.display = hit ? '' : 'none';
+    });
+  });
+
+  // ----- reading progress + back to top -----
+  const prog = document.getElementById('progress'), toTop = document.getElementById('toTop');
+  function onScroll(){
+    const h = document.documentElement;
+    const max = h.scrollHeight - h.clientHeight;
+    prog.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+    toTop.classList.toggle('show', h.scrollTop > 560);
+  }
+  addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+  toTop.addEventListener('click', () => scrollTo({ top: 0, behavior: 'smooth' }));
+</script>
+</body>
+</html>

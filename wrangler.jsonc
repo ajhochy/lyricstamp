@@ -1,0 +1,32 @@
+{
+  // Cloudflare Workers deploy for the LyricStamp user guide.
+  // `npx wrangler deploy` publishes the contents of docs/manual as a static
+  // site, fronted by worker/staff-guide.js.
+  // - Static assets (index.html at /, app-icon.png, screenshots/, etc.) are
+  //   served directly from the ASSETS binding.
+  // - /download/mac is handled by the Worker, which proxies the desktop app's
+  //   latest macOS .dmg from the GitHub release. If the optional
+  //   GITHUB_WORKER_TOKEN secret is set (`wrangler secret put`, never committed)
+  //   it's used server-side; otherwise the Worker falls back to the public
+  //   GitHub Releases API.
+  "name": "lyricstamp",
+  "main": "worker/staff-guide.js",
+  "compatibility_date": "2026-05-30",
+  // PUBLIC guide — unlike the Rhythm / Statement guides there is NO Cloudflare
+  // Access in front of this site. LyricStamp is local-only with no cloud data,
+  // so the *.workers.dev URL is intentionally left enabled for easy sharing
+  // with other churches.
+  "workers_dev": true,
+  // Public custom domain — Cloudflare auto-provisions the DNS record + edge cert
+  // for this hostname on the vcrcapps.com zone (same account/zone as the Rhythm
+  // and Statement guides). PUBLIC: do NOT attach a Cloudflare Access application
+  // to lyricstamp.vcrcapps.com — the guide is meant to be openly shareable with
+  // other churches.
+  "routes": [
+    { "pattern": "lyricstamp.vcrcapps.com", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./docs/manual",
+    "binding": "ASSETS"
+  }
+}

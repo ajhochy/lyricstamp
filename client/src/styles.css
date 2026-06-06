@@ -1089,20 +1089,24 @@ html, body {
   white-space: nowrap;
 }
 
-/* ============= Handler-absent banner (issue G) ============= */
-.handler-absent-banner {
-  background: color-mix(in oklch, var(--warn) 14%, transparent);
-  border-bottom: 1px solid color-mix(in oklch, var(--warn) 32%, transparent);
-  color: var(--warn);
-  font-size: 12px;
-  padding: 6px 16px;
-  text-align: center;
+/* ============= Remote-script setup checklist ============= */
+.remote-script-setup {
+  border: 1px solid var(--accent-border, rgba(52,194,206,.38));
+  background: color-mix(in oklch, var(--accent, #34c2ce) 8%, transparent);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin: 10px 16px;
 }
-
-.handler-absent-banner code {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: color-mix(in oklch, var(--warn) 10%, transparent);
-  padding: 1px 4px;
-  border-radius: 3px;
+.remote-script-setup .rss-title { font-weight: 600; margin-bottom: 10px; }
+.rss-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.rss-steps li { display: flex; gap: 10px; align-items: flex-start; }
+.rss-mark {
+  flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  border: 1px solid var(--accent-border, rgba(52,194,206,.38));
 }
+.rss-steps li.done .rss-mark { background: var(--accent, #34c2ce); color: #062226; }
+.rss-body { min-width: 0; }
+.rss-hint { font-size: 13px; opacity: .8; margin-top: 3px; }
+.rss-actions { margin-top: 6px; display: flex; gap: 10px; align-items: center; }
+.rss-error { color: #e06c6c; font-size: 13px; margin-top: 5px; }

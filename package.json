@@ -38,6 +38,9 @@
       "out/**/*",
       "templates/**/*"
     ],
+    "asarUnpack": [
+      "out/preload/**"
+    ],
     "extraResources": [
       {
         "from": "vendor/AbletonOSC",

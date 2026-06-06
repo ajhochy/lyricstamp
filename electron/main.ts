@@ -1,5 +1,7 @@
 import path from 'node:path';
-import { app, BrowserWindow, dialog } from 'electron';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { start } from '../server/src/index.js';
 
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
@@ -19,6 +21,25 @@ app.whenReady().then(async () => {
   // of origin. Set unconditionally (dev and packaged) so dev-mode sessions
   // land in the same store as the packaged app.
   process.env.ELECTRON_USER_DATA = app.getPath('userData');
+
+  // Where the bundled AbletonOSC fork lives, and the default Ableton User Library.
+  // The server's remote-script install core reads these (with dev fallbacks).
+  process.env.LYRICSTAMP_ABLETON_USERLIB = path.join(
+    os.homedir(), 'Music', 'Ableton', 'User Library',
+  );
+  if (!isDev) {
+    process.env.LYRICSTAMP_REMOTE_SCRIPT_SRC = path.join(process.resourcesPath, 'AbletonOSC');
+  }
+
+  // Native folder picker for the "Locate your Ableton folder" fallback.
+  ipcMain.handle('dialog:chooseAbletonFolder', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Choose your Ableton User Library folder',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
 
   // Tell the server where the built renderer lives.
   // In the packaged app, app.getAppPath() returns the .asar path — Electron's
@@ -69,7 +90,10 @@ app.whenReady().then(async () => {
   const win = new BrowserWindow({
     width: 1280,
     height: 900,
-    webPreferences: { contextIsolation: true },
+    webPreferences: {
+      contextIsolation: true,
+      preload: fileURLToPath(new URL('../preload/preload.mjs', import.meta.url)),
+    },
   });
 
   const url = isDev ? 'http://localhost:3000' : BACKEND_URL;
