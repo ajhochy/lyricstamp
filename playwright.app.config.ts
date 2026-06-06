@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// Packaged-app target: assumes the built AbleSet Sync.app is already running
+// Packaged-app target: assumes the built LyricStamp.app is already running
 // and serving on :7878. Launch the .app yourself, then:
 //   npx playwright test --config=playwright.app.config.ts
 // Used to iterate the actual shipped build to parity with dev mode.

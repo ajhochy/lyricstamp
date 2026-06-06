@@ -5,11 +5,19 @@ import { start } from '../server/src/index.js';
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const BACKEND_URL = 'http://127.0.0.1:7878';
 
+// Pin userData to the original 'ableset-lyrics-sync' directory. userData
+// otherwise derives from the app name, so the LyricStamp rebrand (package
+// name / productName / appId) would move it and orphan existing sessions
+// under ~/Library/Application Support/<old name>/sessions-data. This keeps
+// the store stable across the rename. appData is the OS-level parent
+// (~/Library/Application Support) and does not depend on the app name.
+app.setPath('userData', path.join(app.getPath('appData'), 'ableset-lyrics-sync'));
+
 app.whenReady().then(async () => {
-  // Share the Electron userData path with the server so sessions resolve to
-  // ~/Library/Application Support/ableset-lyrics-sync regardless of origin.
-  // Set unconditionally (dev and packaged) so dev-mode sessions land in the
-  // same store as the packaged app.
+  // Share the (pinned) Electron userData path with the server so sessions
+  // resolve to ~/Library/Application Support/ableset-lyrics-sync regardless
+  // of origin. Set unconditionally (dev and packaged) so dev-mode sessions
+  // land in the same store as the packaged app.
   process.env.ELECTRON_USER_DATA = app.getPath('userData');
 
   // Tell the server where the built renderer lives.
@@ -37,22 +45,22 @@ app.whenReady().then(async () => {
         const res = await fetch(`${BACKEND_URL}/api/health`);
         const body = await res.json() as { ok?: boolean };
         if (body.ok === true) {
-          console.log('[electron] Reusing existing AbleSet Sync backend on :7878');
+          console.log('[electron] Reusing existing LyricStamp backend on :7878');
           // fall through and open the window
         } else {
           throw new Error('Existing backend on :7878 is unhealthy');
         }
       } catch {
         dialog.showErrorBox(
-          'Unable to start AbleSet Sync',
-          'Port 7878 is already in use and the existing backend is not healthy.\n\nQuit any other AbleSet Sync instance, then relaunch.',
+          'Unable to start LyricStamp',
+          'Port 7878 is already in use and the existing backend is not healthy.\n\nQuit any other LyricStamp instance, then relaunch.',
         );
         app.quit();
         return;
       }
     } else {
       const message = err instanceof Error ? err.message : String(err);
-      dialog.showErrorBox('Unable to start AbleSet Sync', message);
+      dialog.showErrorBox('Unable to start LyricStamp', message);
       app.quit();
       return;
     }

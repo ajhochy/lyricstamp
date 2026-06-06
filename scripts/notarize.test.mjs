@@ -14,7 +14,7 @@ const require = createRequire(import.meta.url);
 
 // ---- helpers ---------------------------------------------------------------
 
-function makeFakeContext(appOutDir, productFilename = 'AbleSet Sync') {
+function makeFakeContext(appOutDir, productFilename = 'LyricStamp') {
   return {
     electronPlatformName: 'darwin',
     appOutDir,
@@ -33,7 +33,7 @@ describe('notarize hook — no-op paths (no credentials)', () => {
   beforeEach(() => {
     // Create a real tmpdir and a fake .app inside it so the fs.existsSync check passes.
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'notarize-test-'));
-    appDir = path.join(tmpDir, 'AbleSet Sync.app');
+    appDir = path.join(tmpDir, 'LyricStamp.app');
     fs.mkdirSync(appDir);
 
     // Ensure no Apple credential env vars are present.
