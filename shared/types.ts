@@ -38,3 +38,14 @@ export type LiveMsg =
 export type ClientMsg =
   | { type: 'transport'; action: 'play' | 'pause' | 'stop' }
   | { type: 'transport'; action: 'seek'; ts: number };
+
+/** Filesystem-derived status of the AbletonOSC remote-script install. */
+export interface RemoteScriptStatus {
+  installed: boolean;              // dest AbletonOSC folder exists
+  installedVersion: string | null; // ABLESET_FORK_VERSION read from dest
+  bundledVersion: string | null;   // ABLESET_FORK_VERSION read from bundled source
+  upToDate: boolean;               // installed && installedVersion === bundledVersion
+  userLibFound: boolean;           // resolved Ableton User Library dir exists
+  sourceFound: boolean;            // bundled fork source exists (false => corrupt install)
+  destPath: string;                // absolute <userLib>/Remote Scripts/AbletonOSC
+}

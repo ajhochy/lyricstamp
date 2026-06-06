@@ -15,6 +15,15 @@ export default defineConfig({
       outDir: 'out/main',
     },
   },
+  preload: {
+    plugins: [externalizeDepsPlugin()],
+    build: {
+      lib: {
+        entry: path.resolve(__dirname, 'electron/preload.ts'),
+      },
+      outDir: 'out/preload',
+    },
+  },
   renderer: {
     root: path.resolve(__dirname, 'client'),
     publicDir: path.resolve(__dirname, 'client/public'),

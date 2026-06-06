@@ -12,3 +12,9 @@ Handlers added over stock ideoforms/AbletonOSC:
    this fork is loaded without performing any arrangement write.
 
 See docs/ai/decisions.md (2026-06-05 entry) for fork context and upstream-drift strategy.
+
+Version marker:
+- ABLESET_FORK_VERSION (this file's sibling) records the fork version on disk so
+  the app can detect up-to-date installs without an OSC connection. It MUST be
+  bumped together with the /live/track/arrangement_writer_version handler in
+  abletonosc/track.py (currently "ableset-2").

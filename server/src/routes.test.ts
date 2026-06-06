@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import http from 'node:http';
 import { Readable } from 'node:stream';
-import { mkdtempSync, readdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { handleRequest, setOscClient, stampsToClips } from './routes.js';
@@ -1046,5 +1046,85 @@ describe('shared/types LiveMsg tick handlerStatus', () => {
 
     const tick3 = { ...tick, handlerStatus: 'unknown' as const };
     expect(tick3.handlerStatus).toBe('unknown');
+  });
+});
+
+describe('remote-script routes', () => {
+  let origSrc: string | undefined;
+  let origUserLib: string | undefined;
+
+  beforeEach(() => {
+    origSrc = process.env.LYRICSTAMP_REMOTE_SCRIPT_SRC;
+    origUserLib = process.env.LYRICSTAMP_ABLETON_USERLIB;
+  });
+
+  afterEach(() => {
+    if (origSrc === undefined) delete process.env.LYRICSTAMP_REMOTE_SCRIPT_SRC;
+    else process.env.LYRICSTAMP_REMOTE_SCRIPT_SRC = origSrc;
+    if (origUserLib === undefined) delete process.env.LYRICSTAMP_ABLETON_USERLIB;
+    else process.env.LYRICSTAMP_ABLETON_USERLIB = origUserLib;
+  });
+
+  describe('GET /api/remote-script/status', () => {
+    it('returns a status object', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'rs-route-'));
+      const src = join(tmp, 'AbletonOSC');
+      mkdirSync(src, { recursive: true });
+      writeFileSync(join(src, 'ABLESET_FORK_VERSION'), 'ableset-2\n');
+      process.env.LYRICSTAMP_REMOTE_SCRIPT_SRC = src;
+      process.env.LYRICSTAMP_ABLETON_USERLIB = join(tmp, 'User Library');
+      mkdirSync(process.env.LYRICSTAMP_ABLETON_USERLIB, { recursive: true });
+
+      const req = makeReq('GET', '/api/remote-script/status');
+      const { res, capture } = makeRes();
+      await handleRequest(req, res);
+      const { statusCode, body } = await capture();
+      expect(statusCode).toBe(200);
+      const parsed = JSON.parse(body);
+      expect(parsed).toMatchObject({ installed: false, bundledVersion: 'ableset-2', sourceFound: true });
+    });
+  });
+
+  describe('POST /api/remote-script/install', () => {
+    it('installs and returns the version', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'rs-route-'));
+      const src = join(tmp, 'AbletonOSC');
+      mkdirSync(join(src, 'abletonosc'), { recursive: true });
+      writeFileSync(join(src, 'abletonosc', 'track.py'), 'x\n');
+      writeFileSync(join(src, 'ABLESET_FORK_VERSION'), 'ableset-2\n');
+      const userLib = join(tmp, 'User Library');
+      mkdirSync(userLib, { recursive: true });
+      process.env.LYRICSTAMP_REMOTE_SCRIPT_SRC = src;
+      process.env.LYRICSTAMP_ABLETON_USERLIB = userLib;
+
+      const req = makeReq('POST', '/api/remote-script/install', '{}');
+      const { res, capture } = makeRes();
+      await handleRequest(req, res);
+      const { statusCode, body } = await capture();
+      expect(statusCode).toBe(200);
+      expect(JSON.parse(body)).toMatchObject({ installed: true, installedVersion: 'ableset-2' });
+    });
+
+    it('returns 409 source-missing when the bundled fork is absent', async () => {
+      const tmp = mkdtempSync(join(tmpdir(), 'rs-route-'));
+      process.env.LYRICSTAMP_REMOTE_SCRIPT_SRC = join(tmp, 'nope');
+      process.env.LYRICSTAMP_ABLETON_USERLIB = join(tmp, 'User Library');
+      mkdirSync(process.env.LYRICSTAMP_ABLETON_USERLIB, { recursive: true });
+
+      const req = makeReq('POST', '/api/remote-script/install', '{}');
+      const { res, capture } = makeRes();
+      await handleRequest(req, res);
+      const { statusCode, body } = await capture();
+      expect(statusCode).toBe(409);
+      expect(JSON.parse(body)).toMatchObject({ code: 'source-missing' });
+    });
+
+    it('returns 400 on a non-string userLibPath', async () => {
+      const req = makeReq('POST', '/api/remote-script/install', JSON.stringify({ userLibPath: 123 }));
+      const { res, capture } = makeRes();
+      await handleRequest(req, res);
+      const { statusCode } = await capture();
+      expect(statusCode).toBe(400);
+    });
   });
 });

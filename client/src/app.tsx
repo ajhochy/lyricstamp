@@ -25,6 +25,7 @@ import {
 import { runSessionMigration } from './migrate-sessions';
 import { useLive } from './use-live';
 import type { Song } from '../../shared/types';
+import { RemoteScriptSetup } from './RemoteScriptSetup';
 
 // ---------------------------------------------------------------------------
 // Tweak defaults — must match Tweaks type from use-tweaks.ts.
@@ -159,7 +160,7 @@ export function App() {
       return;
     }
     if (handlerStatus === 'absent') {
-      pushToast('Remote script not loaded', 'Run npm run install:remote-script');
+      pushToast('Remote script not loaded', 'Use the setup checklist above to install it.');
       return;
     }
     if (liveTrackIndex === null) {
@@ -290,7 +291,7 @@ export function App() {
   // Apply all proofed leadsheet stamps to Ableton in a batch.
   const applyLeadsheetToAbleton = useCallback(async () => {
     if (!connected) { pushToast('Ableton not connected'); return; }
-    if (handlerStatus === 'absent') { pushToast('Remote script not loaded', 'Run npm run install:remote-script'); return; }
+    if (handlerStatus === 'absent') { pushToast('Remote script not loaded', 'Use the setup checklist above to install it.'); return; }
     if (liveTrackIndex === null) { pushToast('Select a track first'); return; }
     if (leadsheetStamps.length === 0) { pushToast('No stamps to apply'); return; }
     if (!pdfFile) { pushToast('No PDF loaded'); return; }
@@ -1104,14 +1105,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Handler-absent banner (issue G) — shown when remote script is not loaded */}
-      {handlerStatus === 'absent' && (
-        <div className="handler-absent-banner" role="alert">
-          Remote script not loaded — run{' '}
-          <code>npm run install:remote-script</code>
-          {' '}and restart Ableton.
-        </div>
-      )}
+      <RemoteScriptSetup connected={connected} handlerStatus={handlerStatus} />
 
       {/* MAIN */}
       <div className="main">

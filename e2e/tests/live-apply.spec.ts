@@ -5,16 +5,15 @@ import { test, expect } from '@playwright/test';
 //   - Track picker is disabled when Ableton is not connected
 //   - Apply button is present and disabled with a reason tooltip
 //   - Apply button is hidden in the leadsheet tab
-//   - handler-absent banner CSS styling and content (rendered via DOM injection)
+//   - setup-checklist state when handler is absent (verified via API route mocking)
 //   - stamp() appends locally without side-effects (no OSC call on ArrowRight)
 //
 // Notes on testing environment:
 // - The e2e server may or may not have a live Ableton connection. Tests must
 //   not assume a specific connection state; instead they assert stable structural
 //   properties (button presence, disabled attribute, tooltip text format).
-// - Handler-absent banner behavior is verified by DOM injection (simulating
-//   what React renders when handlerStatus === 'absent'), because the WS tick
-//   is not interceptable via Playwright route in standard mode.
+// - Setup-checklist behavior when handlerStatus === 'absent' is verified using
+//   API route mocking, not DOM injection.
 
 const CHORD_PRO_SONG = `
 {title: Amazing Grace}
@@ -212,64 +211,88 @@ test.describe('live-apply — Apply button disabled states', () => {
   });
 });
 
-test.describe('live-apply — handler-absent banner', () => {
-  test('handler-absent banner element has correct CSS class and role', async ({ page }) => {
-    // Inject a banner element to verify CSS styling renders correctly.
-    // This validates the component markup that React renders when
-    // handlerStatus === 'absent', without needing a real WS tick fixture.
+test.describe('live-apply — remote-script setup checklist', () => {
+  // These tests verify the RemoteScriptSetup component that replaced the
+  // static handler-absent-banner. The component renders when the remote
+  // script status API indicates setup is incomplete.
+
+  test('setup checklist element has correct CSS class and role', async ({ page }) => {
+    // Mock the status endpoint to return an incomplete state so the checklist renders.
+    await page.route('**/api/remote-script/status', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          installed: false,
+          installedVersion: null,
+          bundledVersion: 'ableset-2',
+          upToDate: false,
+          userLibFound: true,
+          sourceFound: true,
+          destPath: '/x/Remote Scripts/AbletonOSC',
+        }),
+      }),
+    );
     await page.goto('/');
     await page.waitForSelector('.app', { timeout: 10000 });
 
-    await page.evaluate(() => {
-      const banner = document.createElement('div');
-      banner.className = 'handler-absent-banner';
-      banner.setAttribute('role', 'alert');
-      banner.innerHTML = 'Remote script not loaded — run <code>npm run install:remote-script</code> and restart Ableton.';
-      document.querySelector('.app')?.insertAdjacentElement('afterbegin', banner);
-    });
-
-    const banner = page.locator('.handler-absent-banner').first();
-    await expect(banner).toBeVisible({ timeout: 3000 });
-    await expect(banner).toContainText('Remote script not loaded');
-    await expect(banner).toContainText('install:remote-script');
-    // The element has role="alert"
-    await expect(banner).toHaveAttribute('role', 'alert');
+    const setup = page.locator('.remote-script-setup').first();
+    await expect(setup).toBeVisible({ timeout: 5000 });
+    // The element has role="region" and aria-label
+    await expect(setup).toHaveAttribute('role', 'region');
+    await expect(setup).toHaveAttribute('aria-label', 'Ableton setup');
   });
 
-  test('handler-absent banner contains the install script command', async ({ page }) => {
+  test('setup checklist shows the install button', async ({ page }) => {
+    await page.route('**/api/remote-script/status', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          installed: false,
+          installedVersion: null,
+          bundledVersion: 'ableset-2',
+          upToDate: false,
+          userLibFound: true,
+          sourceFound: true,
+          destPath: '/x/Remote Scripts/AbletonOSC',
+        }),
+      }),
+    );
     await page.goto('/');
     await page.waitForSelector('.app', { timeout: 10000 });
 
-    await page.evaluate(() => {
-      const banner = document.createElement('div');
-      banner.className = 'handler-absent-banner';
-      banner.setAttribute('role', 'alert');
-      banner.innerHTML = 'Remote script not loaded — run <code>npm run install:remote-script</code> and restart Ableton.';
-      document.querySelector('.app').insertAdjacentElement('afterbegin', banner);
-    });
-
-    const banner = page.locator('.handler-absent-banner').first();
-    await expect(banner).toContainText('install:remote-script');
-    await expect(banner).toContainText('restart Ableton');
+    const setup = page.locator('.remote-script-setup').first();
+    await expect(setup).toBeVisible({ timeout: 5000 });
+    await expect(setup.locator('[data-step="install"] button')).toContainText(/Install remote script/i);
   });
 
-  test('handler-absent banner CSS is styled as a warning (has correct color vars)', async ({ page }) => {
+  test('setup checklist is a div element with correct structure', async ({ page }) => {
+    await page.route('**/api/remote-script/status', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          installed: false,
+          installedVersion: null,
+          bundledVersion: 'ableset-2',
+          upToDate: false,
+          userLibFound: true,
+          sourceFound: true,
+          destPath: '/x/Remote Scripts/AbletonOSC',
+        }),
+      }),
+    );
     await page.goto('/');
     await page.waitForSelector('.app', { timeout: 10000 });
 
-    await page.evaluate(() => {
-      const banner = document.createElement('div');
-      banner.className = 'handler-absent-banner';
-      banner.setAttribute('role', 'alert');
-      banner.textContent = 'Test banner';
-      document.querySelector('.app')?.insertAdjacentElement('afterbegin', banner);
-    });
-
-    const banner = page.locator('.handler-absent-banner').first();
-    await expect(banner).toBeVisible({ timeout: 3000 });
+    const setup = page.locator('.remote-script-setup').first();
+    await expect(setup).toBeVisible({ timeout: 5000 });
     // Verify the element has the expected tag/structure
-    const tagName = await banner.evaluate((el) => el.tagName.toLowerCase());
+    const tagName = await setup.evaluate((el) => el.tagName.toLowerCase());
     expect(tagName).toBe('div');
+    // Checklist has an ordered list of steps
+    await expect(setup.locator('ol.rss-steps')).toBeVisible();
   });
 });
 
