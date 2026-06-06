@@ -11,7 +11,7 @@
     { "criterion_id": "notarize-gatekeeper", "text": "Packaged .app passes Gatekeeper as Notarized Developer ID", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "stapler validate OK; spctl -a -> accepted, source=Notarized Developer ID." }
   ],
   "process_issues": [
-    { "process_category": "P1", "description": "Release/deploy credential mismatch: an App Store Connect *Individual* key (ApiKey_ prefix) was tried first and 401'd against the team Issuer ID; notarization requires a *Team* key with >= Developer role. Lesson now in docs/release-notarization.md troubleshooting. Verify keys with `notarytool history` before wiring secrets.", "detected_by": "manual-smoke" }
+    { "process_category": "release-deploy", "description": "Release/deploy credential mismatch: an App Store Connect *Individual* key (ApiKey_ prefix) was tried first and 401'd against the team Issuer ID; notarization requires a *Team* key with >= Developer role. Lesson now in docs/release-notarization.md troubleshooting. Verify keys with `notarytool history` before wiring secrets.", "detected_by": "manual-smoke" }
   ],
   "workflow_adherence": {
     "expected_chain": ["workflow-orchestrator", "pre-flight-release-audit", "coding-agent", "verification-gate", "manual-smoke", "failure-postmortem"],

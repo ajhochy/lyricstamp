@@ -12,7 +12,7 @@
     { "criterion_id": "ls-projpath", "text": "project_path fork handler resolves the saved set's dir; unsaved → 409", "contract_status": "present", "smoke_status": "pass", "category": "C1", "notes": "New handler loaded after reinstall; handlerStatus present." }
   ],
   "process_issues": [
-    { "process_category": "P1", "description": "Adding a new fork handler requires users to re-run install:remote-script + relaunch Ableton. Installing while Ableton is CLOSED is the clean path (loads on next launch, no toggle). Documented in manual-smoke.md.", "detected_by": "manual-smoke" }
+    { "process_category": "release-deploy", "description": "Adding a new fork handler requires users to re-run install:remote-script + relaunch Ableton. Installing while Ableton is CLOSED is the clean path (loads on next launch, no toggle). Documented in manual-smoke.md.", "detected_by": "manual-smoke" }
   ],
   "workflow_adherence": {
     "expected_chain": ["workflow-orchestrator", "planning-agent", "coding-agent", "verification-gate", "manual-smoke", "failure-postmortem"],
