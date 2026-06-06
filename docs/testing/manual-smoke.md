@@ -141,3 +141,34 @@ Prereqs: the updated fork must be installed (it adds `/live/song/get/project_pat
    - Ableton Arrangement: clips on the track named `[img:<slug>/page-N.png] [full]` at the stamp beats, spanning to the next stamp.
    - **AbleSet** shows the right page image at the right time.
 6. **Unsaved-set check:** with a brand-new unsaved set, Apply should toast **"Save your Ableton set first"** (409) and write nothing.
+
+## In-app remote-script install (AbletonOSC setup checklist)
+
+Requires a Mac where the patched script is not already current.
+
+1. Quit Ableton Live. Launch LyricStamp → the **"Finish connecting…"** checklist
+   appears with step ① showing **Install remote script**.
+2. Click it → confirm files land in
+   `~/Music/Ableton/User Library/Remote Scripts/AbletonOSC/` (including
+   `ABLESET_FORK_VERSION`). Step ① flips to ✓.
+3. In Live: Settings → Link/Tempo/MIDI → set a Control Surface to **AbletonOSC**,
+   then quit and reopen Live. Watch step ② (connected) then step ③ (handler
+   detected) self-check. The checklist disappears once all three are ✓.
+4. **Update path:** edit the installed `ABLESET_FORK_VERSION` to an older value,
+   relaunch LyricStamp → step ① shows **Update remote script**.
+5. **Missing User Library:** temporarily rename `~/Music/Ableton/User Library`,
+   relaunch → step ① shows **Locate your Ableton folder…**; pick a folder → install
+   succeeds under it. Restore the folder name afterward.
+
+### Packaged-app preload gate (verify on the .dmg build, not dev)
+
+The folder picker relies on an Electron preload bundled inside `app.asar`. Verify
+it actually loads in the packaged app:
+
+6. In the packaged `.dmg` build, with `~/Music/Ableton/User Library` renamed so the
+   default path is missing, the step-① button MUST read **"Locate your Ableton
+   folder…"**. If it instead reads **"Open Ableton Live once, then retry."**, the
+   preload did NOT load from the asar — `window.lyricstamp` is undefined. Fix by
+   adding `"asarUnpack": ["out/preload/**"]` to the `build` block in `package.json`,
+   rebuild, and re-verify. (In dev-browser mode the "Open Ableton Live once" text is
+   expected and correct — this gate is specifically about the packaged app.)
