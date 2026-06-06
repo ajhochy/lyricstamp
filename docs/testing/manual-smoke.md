@@ -127,3 +127,17 @@ Restore the patched `track.py` when done.
 3. Verify clip names and beat positions match the stamp log.
 
 **Pass:** Export unchanged from pre-live-stamp behavior.
+
+## Leadsheet "Apply to Ableton" (LS-A..LS-D) — manual, Ableton required
+
+Prereqs: the updated fork must be installed (it adds `/live/song/get/project_path`).
+1. `npm run install:remote-script` → **restart Ableton** (or toggle AbletonOSC off/on).
+2. Open a **saved** Live set (must have a project folder on disk).
+3. In the app, go to the **Leadsheet** tab → load a PDF → stamp a few pages at beats.
+4. Pick a `+LYRICS` track in the picker → click **Apply to Ableton**.
+5. Verify:
+   - Toast `Wrote N clips · M images`.
+   - On disk: `<ProjectFolder>/Lyrics/<slug>/page-N.png` exist (slug = PDF name minus `.pdf`).
+   - Ableton Arrangement: clips on the track named `[img:<slug>/page-N.png] [full]` at the stamp beats, spanning to the next stamp.
+   - **AbleSet** shows the right page image at the right time.
+6. **Unsaved-set check:** with a brand-new unsaved set, Apply should toast **"Save your Ableton set first"** (409) and write nothing.

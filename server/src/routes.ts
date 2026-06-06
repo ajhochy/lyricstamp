@@ -1,6 +1,7 @@
 import type http from 'node:http';
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve, extname } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve, extname, join } from 'node:path';
 import { parseChordPro } from './chordpro.js';
 import { writeAlsFile, DEFAULT_CLIP_LENGTH, type AlsTrackSpec } from './als-writer.js';
 import { packLeadsheetZip } from './zip-packer.js';
@@ -696,6 +697,178 @@ async function handlePostLiveApply(
 }
 
 // ---------------------------------------------------------------------------
+// Leadsheet-apply route (LS-C)
+// ---------------------------------------------------------------------------
+
+/**
+ * Write a decoded PNG buffer to `<projectPath>/Lyrics/<slug>/page-<page>.png`.
+ * Creates parent directories as needed; overwrites if the file exists.
+ */
+async function writePagePng(
+  projectPath: string,
+  slug: string,
+  page: number,
+  pngBuf: Buffer,
+): Promise<void> {
+  const dir = join(projectPath, 'Lyrics', slug);
+  await mkdir(dir, { recursive: true });
+  await writeFile(join(dir, `page-${page}.png`), pngBuf);
+}
+
+/**
+ * POST /api/live/apply-leadsheet
+ * Body: {
+ *   trackIndex: number,
+ *   pdfName: string,
+ *   pages: Array<{ page: number, pngDataUrl: string }>,
+ *   stamps: Array<{ page: number, ts: number }>
+ * }
+ * Returns: { imagesWritten: number, clipsWritten: number, failed: Array<{name,beat,error}> }
+ */
+async function handlePostApplyLeadsheet(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+): Promise<void> {
+  if (_oscClient === null || !_oscClient.connected) {
+    json(res, 503, { error: 'Ableton not connected' });
+    return;
+  }
+
+  let raw: string;
+  try {
+    raw = await readBody(req);
+  } catch {
+    json(res, 400, { error: 'Failed to read request body' });
+    return;
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    json(res, 400, { error: 'Invalid JSON' });
+    return;
+  }
+
+  if (typeof body !== 'object' || body === null) {
+    json(res, 400, { error: 'Body must be a JSON object' });
+    return;
+  }
+
+  const b = body as Record<string, unknown>;
+
+  if (typeof b.trackIndex !== 'number') {
+    json(res, 400, { error: 'Missing or invalid field: trackIndex (number)' });
+    return;
+  }
+
+  if (typeof b.pdfName !== 'string' || b.pdfName.length === 0) {
+    json(res, 400, { error: 'Missing or invalid field: pdfName (string)' });
+    return;
+  }
+
+  if (!Array.isArray(b.pages)) {
+    json(res, 400, { error: 'Missing or invalid field: pages (array)' });
+    return;
+  }
+
+  if (!Array.isArray(b.stamps)) {
+    json(res, 400, { error: 'Missing or invalid field: stamps (array)' });
+    return;
+  }
+
+  const rawPages = b.pages as unknown[];
+  const rawStamps = b.stamps as unknown[];
+
+  // Validate page entries
+  const pageBuffers = new Map<number, Buffer>();
+  for (let i = 0; i < rawPages.length; i++) {
+    const p = rawPages[i];
+    if (
+      typeof p !== 'object' ||
+      p === null ||
+      typeof (p as Record<string, unknown>).page !== 'number' ||
+      typeof (p as Record<string, unknown>).pngDataUrl !== 'string'
+    ) {
+      json(res, 400, { error: `pages[${i}] must have page (number) and pngDataUrl (string)` });
+      return;
+    }
+    const pageNum = (p as Record<string, unknown>).page as number;
+    const dataUrl = (p as Record<string, unknown>).pngDataUrl as string;
+    const buf = decodePngDataUrl(dataUrl);
+    if (buf === null) {
+      json(res, 400, { error: `pages[${i}] has invalid pngDataUrl: must be data:image/png;base64,...` });
+      return;
+    }
+    if (!pageBuffers.has(pageNum)) {
+      pageBuffers.set(pageNum, buf);
+    }
+  }
+
+  // Validate stamp entries
+  for (let i = 0; i < rawStamps.length; i++) {
+    const s = rawStamps[i];
+    if (
+      typeof s !== 'object' ||
+      s === null ||
+      typeof (s as Record<string, unknown>).page !== 'number' ||
+      typeof (s as Record<string, unknown>).ts !== 'number'
+    ) {
+      json(res, 400, { error: `stamps[${i}] must have page (number) and ts (number)` });
+      return;
+    }
+  }
+
+  // Fetch project path — 409 if unsaved
+  const projectPath = await _oscClient.getSongProjectPath();
+  if (projectPath === '') {
+    json(res, 409, { error: 'Save your Ableton set first — no project directory found' });
+    return;
+  }
+
+  const trackIndex = b.trackIndex as number;
+  const slug = slugify((b.pdfName as string).replace(/\.pdf$/i, ''));
+
+  // Write PNG files
+  let imagesWritten = 0;
+  for (const [page, pngBuf] of pageBuffers) {
+    await writePagePng(projectPath, slug, page, pngBuf);
+    imagesWritten++;
+  }
+
+  // Build clips from stamps sorted by ts
+  const sortedStamps = (rawStamps as Array<{ page: number; ts: number }>)
+    .slice()
+    .sort((a, b) => a.ts - b.ts);
+
+  let clipsWritten = 0;
+  const failed: { name: string; beat: number; error: string }[] = [];
+
+  for (let i = 0; i < sortedStamps.length; i++) {
+    const stamp = sortedStamps[i];
+    const next = sortedStamps[i + 1];
+    const beat = stamp.ts;
+    const length = next && next.ts > beat ? next.ts - beat : DEFAULT_CLIP_LENGTH;
+    // Clip name format MUST exactly match handlePostExportZip's leadsheetClips format:
+    // `[img:${subfolder}/page-${page}.png] [full]`
+    const name = `[img:${slug}/page-${stamp.page}.png] [full]`;
+
+    try {
+      await _oscClient.writeStampClip(trackIndex, name, beat, length);
+      clipsWritten++;
+    } catch (err) {
+      failed.push({
+        name,
+        beat,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  json(res, 200, { imagesWritten, clipsWritten, failed });
+}
+
+// ---------------------------------------------------------------------------
 // Main dispatcher
 // ---------------------------------------------------------------------------
 
@@ -747,6 +920,11 @@ export async function handleRequest(
 
   if (method === 'POST' && path === '/api/live/apply') {
     await handlePostLiveApply(req, res);
+    return;
+  }
+
+  if (method === 'POST' && path === '/api/live/apply-leadsheet') {
+    await handlePostApplyLeadsheet(req, res);
     return;
   }
 

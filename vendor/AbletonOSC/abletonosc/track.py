@@ -125,10 +125,11 @@ class TrackHandler(AbletonOSCHandler):
         #--------------------------------------------------------------------------------
         # ABLESET-LYRICS-SYNC: write-free version probe so the app can detect this fork
         # without performing any arrangement write.
-        #   /live/track/arrangement_writer_version  →  reply: ("ableset-1",)
+        #   /live/track/arrangement_writer_version  →  reply: ("ableset-2",)
+        # v2: adds /live/song/get/project_path handler in song.py
         #--------------------------------------------------------------------------------
         def track_arrangement_writer_version(_params):
-            return ("ableset-1",)
+            return ("ableset-2",)
 
         self.osc_server.add_handler("/live/track/arrangement_writer_version",
                                     track_arrangement_writer_version)

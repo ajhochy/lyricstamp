@@ -2,6 +2,7 @@
  * Unit tests for live-write routes (Issue C):
  *   GET /api/live/tracks
  *   POST /api/live/apply
+ *   POST /api/live/apply-leadsheet (LS-C)
  *
  * The OscClient is mocked via setOscClient().  No real HTTP server or UDP
  * sockets are opened — requests are fed through handleRequest() directly.
@@ -10,6 +11,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import http from 'node:http';
 import { Readable } from 'node:stream';
+import { mkdtempSync, readdirSync, readFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { handleRequest, setOscClient, stampsToClips } from './routes.js';
 
 // ---------------------------------------------------------------------------
@@ -23,10 +27,12 @@ interface MockOsc {
   writeStampClipError: Error | null;
   createLyricsTrackCalls: string[];
   createLyricsTrackResult: { index: number; name: string } | Error;
+  songProjectPath: string;
   listTracks(): Promise<{ index: number; name: string }[]>;
   writeStampClip(trackIndex: number, name: string, beat: number, length: number): Promise<void>;
   probeHandler(): Promise<boolean>;
   createLyricsTrack(name: string): Promise<{ index: number; name: string }>;
+  getSongProjectPath(): Promise<string>;
 }
 
 function makeMockOsc(overrides?: Partial<MockOsc>): MockOsc {
@@ -37,6 +43,7 @@ function makeMockOsc(overrides?: Partial<MockOsc>): MockOsc {
     writeStampClipError: null,
     createLyricsTrackCalls: [],
     createLyricsTrackResult: { index: 5, name: 'Lyrics +LYRICS' },
+    songProjectPath: '',
     listTracks() {
       if (this.listTracksResult instanceof Error) {
         return Promise.reject(this.listTracksResult);
@@ -59,6 +66,9 @@ function makeMockOsc(overrides?: Partial<MockOsc>): MockOsc {
         return Promise.reject(this.createLyricsTrackResult);
       }
       return Promise.resolve(this.createLyricsTrackResult as { index: number; name: string });
+    },
+    getSongProjectPath() {
+      return Promise.resolve(this.songProjectPath);
     },
     ...overrides,
   };
@@ -639,6 +649,375 @@ describe('POST /api/live/apply', () => {
     await handleRequest(req, res);
     const { statusCode } = await capture();
     expect(statusCode).toBe(400);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/live/apply-leadsheet (LS-C)
+// ---------------------------------------------------------------------------
+
+// Minimal valid 1×1 transparent PNG, base64-encoded.
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const TINY_PNG_DATA_URL = `data:image/png;base64,${TINY_PNG_BASE64}`;
+
+describe('POST /api/live/apply-leadsheet', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    // Each test gets its own temp dir to avoid cross-test file pollution.
+    tempDir = mkdtempSync(join(tmpdir(), 'ableset-test-'));
+    setOscClient(null as unknown as import('./osc-client.js').OscClient);
+  });
+
+  afterEach(() => {
+    setOscClient(null as unknown as import('./osc-client.js').OscClient);
+  });
+
+  it('returns 503 when oscClient is null', async () => {
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'Great Things.pdf',
+        pages: [{ page: 1, pngDataUrl: TINY_PNG_DATA_URL }],
+        stamps: [{ page: 1, ts: 0 }],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode } = await capture();
+    expect(statusCode).toBe(503);
+  });
+
+  it('returns 503 when Ableton is disconnected', async () => {
+    const osc = makeMockOsc({ connected: false, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'Great Things.pdf',
+        pages: [{ page: 1, pngDataUrl: TINY_PNG_DATA_URL }],
+        stamps: [{ page: 1, ts: 0 }],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode } = await capture();
+    expect(statusCode).toBe(503);
+  });
+
+  it('returns 409 when getSongProjectPath returns empty string (unsaved set)', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: '' });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'Great Things.pdf',
+        pages: [{ page: 1, pngDataUrl: TINY_PNG_DATA_URL }],
+        stamps: [{ page: 1, ts: 0 }],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(409);
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('Save') });
+  });
+
+  it('returns 400 when trackIndex is not a number', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 'bad',
+        pdfName: 'foo.pdf',
+        pages: [{ page: 1, pngDataUrl: TINY_PNG_DATA_URL }],
+        stamps: [{ page: 1, ts: 0 }],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(400);
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('trackIndex') });
+  });
+
+  it('returns 400 when pages is not an array', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'foo.pdf',
+        pages: 'bad',
+        stamps: [{ page: 1, ts: 0 }],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(400);
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('pages') });
+  });
+
+  it('returns 400 when stamps is not an array', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'foo.pdf',
+        pages: [{ page: 1, pngDataUrl: TINY_PNG_DATA_URL }],
+        stamps: 'bad',
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(400);
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('stamps') });
+  });
+
+  it('returns 400 when a page entry has an invalid pngDataUrl', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'foo.pdf',
+        pages: [{ page: 1, pngDataUrl: 'not-a-data-url' }],
+        stamps: [{ page: 1, ts: 0 }],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+    expect(statusCode).toBe(400);
+    expect(JSON.parse(body)).toMatchObject({ error: expect.stringContaining('pngDataUrl') });
+  });
+
+  it('writes PNG files to <tempDir>/Lyrics/<slug>/page-N.png with correct content', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'Great Things F Lead Sheet.pdf',
+        pages: [
+          { page: 1, pngDataUrl: TINY_PNG_DATA_URL },
+          { page: 2, pngDataUrl: TINY_PNG_DATA_URL },
+        ],
+        stamps: [
+          { page: 1, ts: 0 },
+          { page: 2, ts: 8 },
+        ],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+
+    expect(statusCode).toBe(200);
+    const result = JSON.parse(body) as { imagesWritten: number; clipsWritten: number; failed: unknown[] };
+    expect(result.imagesWritten).toBe(2);
+    expect(result.clipsWritten).toBe(2);
+    expect(result.failed).toEqual([]);
+
+    // Verify the files exist on disk with the slug path
+    const slug = 'great-things-f-lead-sheet';
+    const page1Path = join(tempDir, 'Lyrics', slug, 'page-1.png');
+    const page2Path = join(tempDir, 'Lyrics', slug, 'page-2.png');
+    expect(existsSync(page1Path)).toBe(true);
+    expect(existsSync(page2Path)).toBe(true);
+
+    // Verify content matches the decoded PNG bytes
+    const expectedBytes = Buffer.from(TINY_PNG_BASE64, 'base64');
+    expect(readFileSync(page1Path)).toEqual(expectedBytes);
+    expect(readFileSync(page2Path)).toEqual(expectedBytes);
+  });
+
+  it('builds clip names exactly matching the zip export format: [img:<slug>/page-N.png] [full]', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 2,
+        pdfName: 'Amazing Grace Lead Sheet.pdf',
+        pages: [
+          { page: 1, pngDataUrl: TINY_PNG_DATA_URL },
+          { page: 2, pngDataUrl: TINY_PNG_DATA_URL },
+        ],
+        stamps: [
+          { page: 1, ts: 0 },
+          { page: 2, ts: 16 },
+        ],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    await capture();
+
+    const slug = 'amazing-grace-lead-sheet';
+    expect(osc.writeStampClipCalls).toEqual([
+      { trackIndex: 2, name: `[img:${slug}/page-1.png] [full]`, beat: 0, length: 16 },
+      { trackIndex: 2, name: `[img:${slug}/page-2.png] [full]`, beat: 16, length: 4 },
+    ]);
+  });
+
+  it('last clip uses DEFAULT_CLIP_LENGTH (4) when there is no next stamp', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'Song.pdf',
+        pages: [{ page: 1, pngDataUrl: TINY_PNG_DATA_URL }],
+        stamps: [{ page: 1, ts: 32 }],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    await capture();
+
+    expect(osc.writeStampClipCalls).toHaveLength(1);
+    expect(osc.writeStampClipCalls[0].length).toBe(4); // DEFAULT_CLIP_LENGTH
+  });
+
+  it('stamps are sorted by ts before clip building', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'Song.pdf',
+        pages: [
+          { page: 1, pngDataUrl: TINY_PNG_DATA_URL },
+          { page: 2, pngDataUrl: TINY_PNG_DATA_URL },
+        ],
+        // stamps out of order
+        stamps: [
+          { page: 2, ts: 16 },
+          { page: 1, ts: 0 },
+        ],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    await capture();
+
+    // After sorting by ts: page 1 at beat 0, page 2 at beat 16
+    expect(osc.writeStampClipCalls[0].beat).toBe(0);
+    expect(osc.writeStampClipCalls[1].beat).toBe(16);
+  });
+
+  it('partial failure: returns 200 with failed[] when one clip write fails', async () => {
+    let clipCallCount = 0;
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    osc.writeStampClip = async function (_trackIndex, name, beat, length) {
+      clipCallCount++;
+      if (clipCallCount === 2) throw new Error('slot busy');
+      this.writeStampClipCalls.push({ trackIndex: _trackIndex, name, beat, length });
+    };
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const req = makeReq(
+      'POST',
+      '/api/live/apply-leadsheet',
+      JSON.stringify({
+        trackIndex: 0,
+        pdfName: 'Song.pdf',
+        pages: [
+          { page: 1, pngDataUrl: TINY_PNG_DATA_URL },
+          { page: 2, pngDataUrl: TINY_PNG_DATA_URL },
+          { page: 3, pngDataUrl: TINY_PNG_DATA_URL },
+        ],
+        stamps: [
+          { page: 1, ts: 0 },
+          { page: 2, ts: 8 },
+          { page: 3, ts: 16 },
+        ],
+      }),
+    );
+    const { res, capture } = makeRes();
+    await handleRequest(req, res);
+    const { statusCode, body } = await capture();
+
+    expect(statusCode).toBe(200);
+    const result = JSON.parse(body) as {
+      imagesWritten: number;
+      clipsWritten: number;
+      failed: { name: string; beat: number; error: string }[];
+    };
+    expect(result.clipsWritten).toBe(2);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0]).toMatchObject({
+      beat: 8,
+      error: expect.stringContaining('slot busy'),
+    });
+  });
+
+  it('re-apply: overwrites the PNG file (no duplicate), slug path unchanged', async () => {
+    const osc = makeMockOsc({ connected: true, songProjectPath: tempDir });
+    setOscClient(osc as unknown as import('./osc-client.js').OscClient);
+
+    const body = JSON.stringify({
+      trackIndex: 0,
+      pdfName: 'Song.pdf',
+      pages: [{ page: 1, pngDataUrl: TINY_PNG_DATA_URL }],
+      stamps: [{ page: 1, ts: 0 }],
+    });
+
+    // First apply
+    const req1 = makeReq('POST', '/api/live/apply-leadsheet', body);
+    const { res: res1, capture: cap1 } = makeRes();
+    await handleRequest(req1, res1);
+    await cap1();
+
+    // Second apply (re-apply)
+    const req2 = makeReq('POST', '/api/live/apply-leadsheet', body);
+    const { res: res2, capture: cap2 } = makeRes();
+    await handleRequest(req2, res2);
+    const { statusCode } = await cap2();
+
+    expect(statusCode).toBe(200);
+
+    // Only one file should exist (no duplicate)
+    const slug = 'song';
+    const files = readdirSync(join(tempDir, 'Lyrics', slug));
+    expect(files).toHaveLength(1);
+    expect(files[0]).toBe('page-1.png');
   });
 });
 
