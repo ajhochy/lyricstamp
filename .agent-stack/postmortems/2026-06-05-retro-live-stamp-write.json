@@ -1,0 +1,38 @@
+{
+  "run_id": "2026-06-05-retro-live-stamp-write",
+  "issue": 32,
+  "date": "2026-06-05",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": false,
+  "criteria_results": [],
+  "process_issues": [
+    {
+      "process_category": "P2",
+      "description": "Verification-surface gap (recurring, 2x this run): the build-target e2e runs the compiled web bundle in Playwright/Chromium, which does NOT exercise the Electron runtime. Two real bugs shipped past verification-gate PASS and were caught only in manual Ableton smoke: (1) 1-beat clip length, (2) window.prompt unsupported in Electron. Addressed by verification-gate Required Evidence #9 (packaged-runtime parity) added this retro.",
+      "detected_by": "manual-smoke"
+    }
+  ],
+  "workflow_adherence": {
+    "expected_chain": [
+      "workflow-orchestrator", "planning-agent", "acceptance-contract", "coding-agent",
+      "verification-gate", "manual-smoke", "failure-postmortem", "project-state-updater", "workflow-retrospective"
+    ],
+    "observed_chain": [
+      "workflow-orchestrator (Skill)", "planning-agent (subagent)", "acceptance-contract (in-process contract tests)",
+      "coding-agent x4 (server / client / install / create-track — all returned validation reports, no premature project-state rewrite — the 2026-06-05 coding-agent SKILL fix held)",
+      "verification-gate (Skill, full evidence + screenshot)", "manual-smoke (2 FAIL → repair → re-verify, then PASS)",
+      "failure-postmortem x3 (2 fail + 1 pass)", "project-state-updater (Skill)", "workflow-retrospective (this)"
+    ],
+    "skipped_skills": [],
+    "issues": [
+      {
+        "workflow_category": "C3",
+        "affected_skill": "verification-gate",
+        "description": "verification-gate emitted PASS twice on changes whose user-visible behavior only manifests in the Electron runtime (clip length needs a live Ableton; window.prompt is disabled in Electron). The build-target e2e (Chromium) cannot catch these. The packaged-target smoke (test:e2e:build) was treated as optional/post-hoc rather than a required gate for renderer/Electron changes.",
+        "detected_by": "manual-smoke"
+      }
+    ],
+    "overall_score": "strict"
+  }
+}
