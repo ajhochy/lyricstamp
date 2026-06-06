@@ -1,6 +1,6 @@
 {
   "name": "ableset-lyrics-sync",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local macOS tool for worship music directors to sync lyrics/leadsheets with Ableton Live",
   "type": "module",
   "main": "out/main/main.js",
