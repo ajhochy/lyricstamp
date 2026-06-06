@@ -135,6 +135,7 @@ export function App() {
   // Track list fetched from Ableton when connected.
   const [liveTracks, setLiveTracks] = useState<{ index: number; name: string }[]>([]);
   const [applyingToAbleton, setApplyingToAbleton] = useState<boolean>(false);
+  const [applyingLeadsheetToAbleton, setApplyingLeadsheetToAbleton] = useState<boolean>(false);
   // Inline "new +LYRICS track" creation (window.prompt is unsupported in Electron).
   const [creatingTrack, setCreatingTrack] = useState<boolean>(false);
   const [newTrackName, setNewTrackName] = useState<string>('');
@@ -274,6 +275,85 @@ export function App() {
   const removeLeadsheetStamp = useCallback((i: number) => {
     setLeadsheetStamps((arr) => arr.filter((_, j) => j !== i));
   }, [setLeadsheetStamps]);
+
+  // Reason why the leadsheet Apply button is disabled (null = enabled).
+  const applyLeadsheetDisabledReason = useMemo<string | null>(() => {
+    if (!connected) return 'Ableton not connected';
+    if (handlerStatus === 'absent') return 'Remote script not loaded';
+    if (handlerStatus === 'unknown') return 'Checking remote script…';
+    if (liveTrackIndex === null) return 'No track selected';
+    if (leadsheetStamps.length === 0) return 'No stamps to apply';
+    if (!pdfFile) return 'No PDF loaded';
+    return null;
+  }, [connected, handlerStatus, liveTrackIndex, leadsheetStamps.length, pdfFile]);
+
+  // Apply all proofed leadsheet stamps to Ableton in a batch.
+  const applyLeadsheetToAbleton = useCallback(async () => {
+    if (!connected) { pushToast('Ableton not connected'); return; }
+    if (handlerStatus === 'absent') { pushToast('Remote script not loaded', 'Run npm run install:remote-script'); return; }
+    if (liveTrackIndex === null) { pushToast('Select a track first'); return; }
+    if (leadsheetStamps.length === 0) { pushToast('No stamps to apply'); return; }
+    if (!pdfFile) { pushToast('No PDF loaded'); return; }
+
+    setApplyingLeadsheetToAbleton(true);
+    pushToast('Rendering pages…');
+    try {
+      // Render each unique stamped page exactly once (same path as zip export).
+      const uniquePages = [...new Set(leadsheetStamps.map((s) => s.page))];
+      const pageDataUrls = new Map<number, string>();
+      for (const pg of uniquePages) {
+        pageDataUrls.set(pg, await pageRenderer.renderToDataUrl(pg));
+      }
+
+      const pages = uniquePages.map((pg) => ({
+        page: pg,
+        pngDataUrl: pageDataUrls.get(pg)!,
+      }));
+
+      // pdfName source matches the zip export (leadsheetName = pdfFile.name sans .pdf extension,
+      // but the server endpoint receives the raw pdfFile.name and computes the slug itself).
+      const pdfName = pdfFile.name;
+
+      const stamps = leadsheetStamps.map((s) => ({ page: s.page, ts: s.ts }));
+
+      const res = await fetch('/api/live/apply-leadsheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackIndex: liveTrackIndex, pdfName, pages, stamps }),
+      });
+
+      if (res.status === 409) {
+        pushToast('Save your Ableton set first');
+        return;
+      }
+      if (res.status === 503) {
+        pushToast('Ableton not connected');
+        return;
+      }
+      if (!res.ok) {
+        let errMsg = 'Unknown error';
+        try {
+          const body = await res.json() as { error?: string };
+          errMsg = body.error ?? errMsg;
+        } catch { /* ignore */ }
+        pushToast(`Apply failed: ${errMsg}`);
+        return;
+      }
+      const result = await res.json() as { imagesWritten: number; clipsWritten: number; failed: { page: number; ts: number; error: string }[] };
+      if (result.failed.length === 0) {
+        pushToast(`Wrote ${result.clipsWritten} clips · ${result.imagesWritten} images`);
+      } else {
+        pushToast(
+          `Wrote ${result.clipsWritten} clips, failed ${result.failed.length}`,
+          result.failed.map((f) => `p${f.page}`).join(', '),
+        );
+      }
+    } catch {
+      pushToast('Apply failed: backend unreachable');
+    } finally {
+      setApplyingLeadsheetToAbleton(false);
+    }
+  }, [connected, handlerStatus, liveTrackIndex, leadsheetStamps, pdfFile, pageRenderer, pushToast]);
 
   // ---- Named sessions ----
   const [sessionsOpen, setSessionsOpen] = useState<boolean>(false);
@@ -921,8 +1001,8 @@ export function App() {
               </div>
             )}
           </div>
-          {/* Track picker — shown in lyrics tab when Ableton is connected */}
-          {tab === 'lyrics' && (
+          {/* Track picker — shown in lyrics and leadsheet tabs when Ableton is connected */}
+          {(tab === 'lyrics' || tab === 'leadsheet') && (
             <div className="live-track-picker">
               <select
                 className="select"
@@ -997,6 +1077,18 @@ export function App() {
               data-apply-reason={applyDisabledReason ?? undefined}
             >
               {applyingToAbleton ? 'Applying…' : 'Apply to Ableton'}
+            </button>
+          )}
+          {/* Apply to Ableton — only in leadsheet tab, beside the Export .zip button */}
+          {tab === 'leadsheet' && (
+            <button
+              className="btn apply-btn leadsheet-apply-btn"
+              onClick={() => { void applyLeadsheetToAbleton(); }}
+              disabled={applyLeadsheetDisabledReason !== null || applyingLeadsheetToAbleton}
+              title={applyLeadsheetDisabledReason ?? 'Write all stamped pages to Ableton Arrangement'}
+              data-apply-reason={applyLeadsheetDisabledReason ?? undefined}
+            >
+              {applyingLeadsheetToAbleton ? 'Applying…' : 'Apply to Ableton'}
             </button>
           )}
           <button

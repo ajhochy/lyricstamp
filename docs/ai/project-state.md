@@ -49,6 +49,30 @@ Previously shipped & merged to main 2026-06-05: PR #25 (Electron wrapper + serve
 
 ## Recent coding-agent runs
 
+### 2026-06-05 — LS-D (leadsheet Apply to Ableton client UI)
+- Files modified:
+  - `client/src/app.tsx` (EDIT) — added `applyingLeadsheetToAbleton` state; added `applyLeadsheetDisabledReason` useMemo (mirrors `applyDisabledReason` with added `!pdfFile` guard); added `applyLeadsheetToAbleton()` callback (renders unique stamped pages via `pageRenderer.renderToDataUrl`, POSTs `/api/live/apply-leadsheet` with `{trackIndex, pdfName, pages, stamps}`, handles 200/409/503/other responses with toasts); extended track picker condition from `tab === 'lyrics'` to `tab === 'lyrics' || tab === 'leadsheet'`; added `button.apply-btn.leadsheet-apply-btn` in the leadsheet tab beside the Export .zip button
+  - `e2e/tests/live-apply.spec.ts` (EDIT) — updated two tests that asserted the old behavior (picker hidden in leadsheet tab, lyrics Apply button hidden in leadsheet tab) to reflect the new shared-picker design and the leadsheet Apply button's coexistence
+  - `e2e/tests/leadsheet-apply.spec.ts` (NEW) — 12 Playwright tests: picker visible/present/disabled in leadsheet tab; single shared picker (not a duplicate); leadsheet Apply button present/disabled/title/valid-reason/not-in-lyrics-tab; lyrics Apply button regression; Export + Apply coexist; endpoint wired check
+- Checks run:
+  - `npm run typecheck` — PASS
+  - `npm run lint` — PASS
+  - `npm test` — PASS (133 tests: all prior, no new unit tests needed — no new server logic)
+  - `npm run build` — PASS (client + server)
+  - `npm run electron:build` — PASS (required to update `out/renderer` for e2e target; 25.17 kB CSS)
+  - `npm run test:e2e` — PASS (47 tests: 35 prior + 12 new in `leadsheet-apply.spec.ts`)
+- Decisions made:
+  - `pdfName` sent to server as `pdfFile.name` (the raw filename with `.pdf` extension) matching the `leadsheetName` source in `exportLeadsheet` — the server endpoint computes the slug itself via `slugify(pdfName.replace(/\.pdf$/i, ''))`, same as `handlePostExportZip`. This ensures the slug matches exactly between zip-export and live-apply.
+  - The new Apply button uses class `apply-btn leadsheet-apply-btn` so existing tests using `.apply-btn` can distinguish lyrics vs leadsheet buttons with `:not(.leadsheet-apply-btn)` selector.
+  - `applyLeadsheetDisabledReason` adds a `!pdfFile` guard (returns 'No PDF loaded') that the lyrics `applyDisabledReason` does not have — because the lyrics tab has no PDF requirement.
+  - Two existing `live-apply.spec.ts` tests were updated: (1) the "track picker hidden in leadsheet tab" assertion was inverted to "picker visible in leadsheet tab"; (2) the "Apply button is hidden in leadsheet tab" assertion now checks that the lyrics-tab button (`.apply-btn:not(.leadsheet-apply-btn)`) is not visible, and that `.leadsheet-apply-btn` IS visible. Both are behavior-accurate updates.
+- Deviations from spec:
+  - The spec's `applyLeadsheetDisabledReason` checks `leadsheetStamps.length === 0` (as 'No stamps to apply') and then `!pdfFile` (as 'No PDF loaded'). The implemented order is: connected → handlerStatus → track → stamps → pdf. This ordering means "No track selected" shows before "No stamps" or "No PDF" — consistent with the lyrics tab guard ordering.
+  - e2e "endpoint wired" test asserts `response.status() !== 404` (accepts 500 when OSC timeout occurs because Ableton is connected but fork not installed). The original test comment listed only [200, 400, 503]; updated to `not.toBe(404)` to be environment-agnostic.
+- Concerns:
+  - The `applyLeadsheetToAbleton` callback renders pages one at a time in a for-loop (same as `exportLeadsheet`). For large leadsheets (many unique pages) this is sequential. Acceptable for now — matches existing pattern.
+  - `electron:build` must be run before `test:e2e` (the e2e playwright config serves `out/renderer`, not `dist`). This is a known repo constraint noted in prior coding-agent runs. `npm run build` alone is insufficient.
+
 ### 2026-06-05 — LS-A/LS-B/LS-C (leadsheet-apply server+fork group)
 - Files modified:
   - `vendor/AbletonOSC/abletonosc/song.py` (EDIT) — added `/live/song/get/project_path` handler returning `os.path.dirname(song.file_path)` or `""` when unsaved; additive, no existing handler changed; `import os` was already present

@@ -67,13 +67,13 @@ test.describe('live-apply — track picker', () => {
     await expect(picker).toBeDisabled({ timeout: 8000 });
   });
 
-  test('track picker hidden in leadsheet tab', async ({ page }) => {
+  test('track picker visible in leadsheet tab (shared picker for both tabs)', async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('.app', { timeout: 10000 });
 
-    // Switch to Leadsheet tab
+    // Switch to Leadsheet tab — the picker is now shown in both lyrics and leadsheet tabs.
     await page.getByRole('button', { name: /leadsheet/i }).click();
-    await expect(page.locator('.live-track-picker')).not.toBeVisible();
+    await expect(page.locator('.live-track-picker')).toBeVisible({ timeout: 5000 });
   });
 
   test('/api/live/tracks endpoint returns a valid array structure', async ({ request }) => {
@@ -187,12 +187,16 @@ test.describe('live-apply — Apply button disabled states', () => {
     expect(validReasons.some((r) => title?.includes(r))).toBe(true);
   });
 
-  test('Apply button is hidden in leadsheet tab', async ({ page }) => {
+  test('Lyrics Apply button is hidden in leadsheet tab (leadsheet has its own Apply button)', async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('.app', { timeout: 10000 });
 
     await page.getByRole('button', { name: /leadsheet/i }).click();
-    await expect(page.locator('button.apply-btn')).not.toBeVisible();
+    // The lyrics-tab Apply button (no leadsheet-apply-btn class) is not shown in leadsheet tab.
+    // The leadsheet tab has its own button.apply-btn.leadsheet-apply-btn instead.
+    await expect(page.locator('button.apply-btn:not(.leadsheet-apply-btn)')).not.toBeVisible();
+    // The leadsheet Apply button IS visible in the leadsheet tab.
+    await expect(page.locator('button.leadsheet-apply-btn')).toBeVisible({ timeout: 5000 });
   });
 
   test('Export button remains visible and enabled alongside Apply button', async ({ page }) => {
