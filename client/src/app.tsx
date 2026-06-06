@@ -25,6 +25,7 @@ import {
 import { runSessionMigration } from './migrate-sessions';
 import { useLive } from './use-live';
 import type { Song } from '../../shared/types';
+import { RemoteScriptSetup } from './RemoteScriptSetup';
 
 // ---------------------------------------------------------------------------
 // Tweak defaults — must match Tweaks type from use-tweaks.ts.
@@ -1104,14 +1105,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Handler-absent banner (issue G) — shown when remote script is not loaded */}
-      {handlerStatus === 'absent' && (
-        <div className="handler-absent-banner" role="alert">
-          Remote script not loaded — run{' '}
-          <code>npm run install:remote-script</code>
-          {' '}and restart Ableton.
-        </div>
-      )}
+      <RemoteScriptSetup connected={connected} handlerStatus={handlerStatus} />
 
       {/* MAIN */}
       <div className="main">
