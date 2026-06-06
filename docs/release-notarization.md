@@ -103,3 +103,19 @@ This is correct and intentional — local builds are not notarized. Notarization
 - `scripts/notarize.cjs` — custom `afterSign` hook; notarizes only when credentials are present (CI). Uses `@electron/notarize` v2.5.0 notarytool path (API-key strategy preferred; Apple-ID fallback).
 - `"mac": { "notarize": false }` in `package.json` disables electron-builder 26's **built-in** notarization path (`notarizeIfProvided`) so that only the `afterSign` hook runs. Without this, both would run and double-submit the same binary to Apple's notary service.
 - See `docs/ai/decisions.md` (2026-06-05 entry "afterSign notarization hook") for the rationale.
+
+## Troubleshooting: 401 Unauthenticated from notarytool
+
+Notarization needs a **Team Key** (App Store Connect → Users and Access → Integrations →
+**Team Keys**) with at least **Developer** role. An **Individual Key** 401s against the
+team Issuer ID. Verify any key in one line (prints "Successfully received submission
+history" when valid):
+
+```
+xcrun notarytool history --key AuthKey_<KEYID>.p8 --key-id <KEYID> \
+  --issuer <ISSUER_ID>
+```
+
+Verified working (2026-06-05): Key ID `9XHDX3ZN44`, Issuer `0ec65016-…` →
+`spctl -a` reports `accepted · source=Notarized Developer ID`. (Individual key
+`R9WYMTP5I5DS` does NOT work — do not use it.)

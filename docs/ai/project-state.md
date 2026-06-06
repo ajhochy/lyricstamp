@@ -3,11 +3,13 @@
 _Last updated: 2026-06-05_
 
 ## Current focus
-**live-stamp-write (proof-then-apply)** — implemented A–H and verified (verification-gate PASS 2026-06-05, commit `6609be4`). "Apply to Ableton" batch-writes proofed stamps into the live Arrangement via a bundled, patched AbletonOSC (`/live/track/duplicate_clip_to_arrangement` + `arrangement_writer_version` probe); `.als` export coexists. **Pending: manual Ableton smoke, then open PR → main.** PR #25 (Electron wrapper + server-side session storage) merged to main 2026-06-05.
+**macOS notarization** (PR #34, branch `feat/notarize`) — wired an `afterSign` hook (`scripts/notarize.cjs`) that notarizes + staples via notarytool API key; `mac.notarize:false` stops electron-builder double-submitting; the custom `sign.cjs` only signed. **Proven end-to-end locally 2026-06-05:** build→sign→notarize→staple, `spctl -a` → "accepted, source=Notarized Developer ID". All 5 GitHub secrets set (working **Team** key `9XHDX3ZN44` / issuer `0ec65016-…`; the individual key `R9WYMTP5I5DS` 401'd — see `docs/release-notarization.md`). Pending: mark PR #34 ready + (optional) tag-push CI release test.
+
+Previously shipped & merged to main 2026-06-05: PR #25 (Electron wrapper + server-side session storage), PR #32 (live-stamp-write proof-then-apply).
 
 ## Active branch / PR
-- Branch: `feat/live-stamp-write` (off merged main `054b717`); commits e7ad999 (plan) → cdba8d2 (server B–D) → 924e0d7 (client E–G) → 6609be4 (install A+H)
-- PR: not yet opened (manual merge required)
+- Branch: `feat/notarize` (off main `d6ebc87`); commit `fce005b`+ (notarize hook) → PR #34
+- PR #34: open (draft until ready); merge manual
 
 ## Recently completed
 - Initial app built: client (Vite/React) + server (Node.js HTTP/WS/OSC) fully functional in dev mode
