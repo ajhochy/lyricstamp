@@ -125,6 +125,35 @@ test.describe('#27 — ChordPro chords preserved inline', () => {
     const lyricLines = song.lines.filter((l: { text?: string }) => l.text);
     expect(lyricLines[0]?.text).toBe('Just lyrics here');
   });
+
+  // issue-27-c5: the preview tab must visibly render chords above lyrics in the DOM.
+  test('preview renders chords above lyrics in the DOM', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('.workspace', { timeout: 10000 });
+    // Expand the ChordPro setup panel and paste a chord chart.
+    await page.locator('.setup-header').click();
+    await page.locator('.textarea').fill(CHORD_PRO_SONG);
+
+    // The preview renders from the raw paste (no Reload needed) via chordsheetjs.
+    const preview = page.locator('.chordpro-preview');
+    await expect(preview).toBeVisible({ timeout: 5000 });
+
+    // A chord cell carries the chord text...
+    const firstChord = preview.locator('td.chord').first();
+    await expect(firstChord).toContainText('G', { timeout: 5000 });
+    // ...and lyric cells exist (chord-above-lyric layout present).
+    await expect(preview.locator('td.lyrics').first()).toBeVisible();
+
+    // Directive: {title} renders as a labelled header element.
+    await expect(preview.locator('.title')).toContainText('Amazing Grace');
+
+    // Chord row sits above the lyric row within a row table (vertical position).
+    const chordBox = await firstChord.boundingBox();
+    const lyricBox = await preview.locator('td.lyrics').first().boundingBox();
+    expect(chordBox).not.toBeNull();
+    expect(lyricBox).not.toBeNull();
+    expect(chordBox!.y).toBeLessThan(lyricBox!.y);
+  });
 });
 
 // --- #28: Stamp preview UX ---

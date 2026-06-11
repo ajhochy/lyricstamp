@@ -542,6 +542,72 @@ html, body {
 }
 .setup-body .actions { display: flex; align-items: flex-end; }
 
+/* ============= ChordPro preview (issue #27) ============= */
+/* Display-only chord-above-lyric render of the raw paste. HtmlTableFormatter
+   emits per-row <table class="row"> with a chord <tr> above a lyric <tr>, plus
+   directive elements (h1.title, div.paragraph.<type>, td.comment). */
+.chordpro-preview {
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  padding: 10px 12px;
+  max-height: 220px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.chordpro-preview .chord-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chordpro-preview .paragraph {
+  margin-bottom: 10px;
+}
+.chordpro-preview table.row {
+  border-collapse: collapse;
+  margin: 0;
+}
+.chordpro-preview table.row td {
+  padding: 0 1px;
+  vertical-align: bottom;
+  white-space: pre;
+}
+.chordpro-preview td.chord {
+  color: var(--accent);
+  font-weight: 700;
+  height: 1.3em;
+}
+.chordpro-preview td.lyrics {
+  color: var(--fg-1);
+}
+.chordpro-preview h1.title,
+.chordpro-preview .title {
+  color: var(--fg-0);
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+.chordpro-preview h2.subtitle,
+.chordpro-preview .subtitle {
+  color: var(--fg-2);
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+.chordpro-preview td.comment,
+.chordpro-preview .comment {
+  color: var(--accent-strong);
+  font-style: italic;
+  font-weight: 600;
+}
+.chordpro-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--fg-1);
+}
+
 /* ============= Two-column main ============= */
 .workspace {
   display: grid;

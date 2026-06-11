@@ -1,14 +1,20 @@
 # Project State — LyricStamp (repo slug: lyricstamp; data dir stays ableset-lyrics-sync)
 
-_Last updated: 2026-06-06_
+_Last updated: 2026-06-11_
 
 ## Current focus
+**Bug-fix run #30/#27/#28** (branch `workflow/run-2026-06-11`, off fresh `main`). Triage outcome: **#30 (spacebar pause-in-place)** and **#28 (stamp preview labels)** were already implemented in `main` (commit `054b717`, Electron PR #25) — `osc-client.pausePlaying()`→`stop_playing` (Live does not rewind), `continuePlaying()`→`continue_playing`, `returnToStart()` is the separate "Stop (to start)" control; `views.tsx` already has "Now playing"/"Next to stamp →"/`next-up` labelling. The GitHub issues were stale/never-closed. This run added executable acceptance contracts pinning that behavior (no code change for #30/#28). **#27 (ChordPro preview) was the real new work**: new `client/src/chord-preview.ts` (`renderChordProHtml` via chordsheetjs `HtmlTableFormatter`) rendered chord-above-lyric + directive-labels into the setup-body preview (`client/src/views.tsx` + `.chordpro-preview` CSS), stamp path (`server/src/chordpro.ts`) untouched. Verified PASS: typecheck, lint, 145 unit, 10 contract, web build, electron:build, 52 Playwright e2e, plus a visual screenshot of the preview. **Manual-smoke remaining (Ableton-required, in PR body): #30 true pause/resume playhead retention (contract c1/c2/c3).** Draft PR pending.
+
+Note: stale leftover branch `issue-30-pause-playhead` (local + origin) is based on old `main` and superseded by the better in-main impl — not used, safe to delete later.
+
+### Prior focus (rebrand — still pending merge)
 **Rebrand "AbleSet Sync" → "LyricStamp"** (branch `workflow/rebrand-lyricstamp`, stacked on `chore/add-license`). Display-only: `package.json` name→`lyricstamp`, productName→`LyricStamp`, appId→`com.lyricstamp`; UI wordmark/title/Electron dialogs+logs/`README`/`NOTICE`; `scripts/e2e-app.mjs` resolves `LyricStamp.app` (+ robust binary-from-bundle-name fallback); e2e wordmark assertion → `LyricStamp`. **Data-safety KEEPS (must not rename):** Electron `userData` is now explicitly pinned to the original `<appData>/ableset-lyrics-sync` dir (so the appId/name change does NOT move the session store), `session-store.ts` `appName='ableset-lyrics-sync'`, localStorage prefix `ableset-sync.` / IndexedDB `ableset-sync`, and the `ableset-2` `arrangement_writer_version` handshake. References to **AbleSet** (the iPad app) stay as factual integration. Doc scope was visible-surface-only (`docs/ai/*`, `HANDOFF*`, `design/` NOT swept). Verified PASS: typecheck/lint, 133 unit, build, `electron:dist` (signed `LyricStamp.app` + dmg/zip), 47 packaged-app e2e. **Pending: GitHub repo rename (`ableset-lyrics-sync`→`lyricstamp`) + local dir rename + PR review/merge.**
 
 Shipped & merged to main: PR #25 (Electron wrapper + session storage), PR #32 (lyrics live-apply), PR #34 (notarization), PR #35 (release publish fix), **PR #36 (leadsheet "Apply to Ableton")**. **v0.1.1 published** (signed+notarized, Latest); v0.1.0 left as stale draft. License **PR #39** (PolyForm Noncommercial 1.0.0) open.
 
 ## Active branch / PR
-- Branch: `workflow/rebrand-lyricstamp` (stacked on `chore/add-license`); merge manual
+- **Branch: `workflow/run-2026-06-11`** (off fresh `main`) — issues #30/#27/#28; draft PR pending; merge manual
+- Prior: `workflow/rebrand-lyricstamp` (stacked on `chore/add-license`); merge manual
 - License: PR #39 `chore/add-license` → main (open)
 - Out-of-scope flags: committed `Ableset Lyrics Sync.zip` artifact; untracked `assets/icon.icns`+`icon.png` the build depends on (latent CI-release risk)
 
@@ -38,21 +44,36 @@ Shipped & merged to main: PR #25 (Electron wrapper + session storage), PR #32 (l
 - CI: `.github/workflows/ci.yml` + `release-electron.yml` exist; push to the branch triggers CI (watch with `gh run watch`). The `release-electron` signing/notarization pipeline is separate and untouched by this change.
 - Migration runs origin-side on app mount, guarded by `localStorage['ableset-sync.migrated-v1']` per origin. The user's `localhost:3000` data is now migrated; a packaged-origin (`127.0.0.1:7878`) launch has no legacy IndexedDB so it no-ops correctly. The working-session auto-restore PDF (`pdf-store.ts`, IndexedDB `kv`) is still origin-bound — tracked as a follow-up, out of scope here.
 
-## Test status (verified 2026-06-05, `feat/live-stamp-write` @ `6609be4`)
-- Unit tests: **100 passing** (`npm test` — 7 files; added osc-client, routes, install-remote-script)
-- Playwright E2E (build target): **33 passing** (`npm run test:e2e`; +16 `live-apply.spec.ts`)
-- TypeScript / Lint / build: passing (`npm run typecheck`, `npm run lint`, `npm run build`)
-- UI screenshot verified: track picker + "Apply to Ableton" + handler-absent banner render (`/tmp/live-apply-ui.png`)
-- **Manual-smoke only (Ableton required):** live `POST /api/live/apply` writing clips into the Arrangement; AbleSet reading live-placed clips
+## Test status (verified 2026-06-11, `workflow/run-2026-06-11`)
+- Unit tests: **145 passing** (`npm test` — 10 files)
+- Contract tests: **10 passing** (`npx vitest run --config vitest.contract.config.ts` — issue-27 ×5, issue-28 ×2, issue-30 ×3; kept out of the default `npm test` glob)
+- Playwright E2E (build target): **52 passing** (`npm run test:e2e`; +1 new `#27` preview-DOM test in `verification.spec.ts`). Requires `npm run electron:build` first (e2e reads `out/renderer`).
+- TypeScript / Lint / web build / electron:build: passing
+- UI screenshot verified: ChordPro chord-above-lyric preview renders (title header, accent chords above lyrics, comment label) — `/tmp/ls-chordpro-preview.png`
+- **Manual-smoke only (Ableton required):** #30 true pause-in-place / resume-from-position playhead retention (contract issue-30 c1/c2/c3) — OSC mapping is unit-pinned (c5) but the playhead behavior needs a running Live instance.
 
 ## Next step
-1. **Manual Ableton smoke** of live-stamp-write (`docs/testing/manual-smoke.md`): install remote script, restart Live, pick a `+LYRICS` track, stamp, "Apply to Ableton", verify clips in the Arrangement + AbleSet reads them.
-2. Open PR `feat/live-stamp-write` → main; push triggers CI (`gh run watch`).
-3. (Carried over) cross-version Live 11/12 `.als` manual check before shipping to Live 11 users.
+1. Open **draft PR** `workflow/run-2026-06-11` → main with `Closes #30`, `Closes #27`, `Closes #28`; push triggers CI (`gh run watch`).
+2. **Manual Ableton smoke** of #30: play, press Space mid-song → confirm playhead stays put (does not jump to beat 1); press Space again → resumes from paused position; confirm "Stop (to start)" still rewinds to beat 1.
+3. (Carried over) rebrand `workflow/rebrand-lyricstamp` merge + repo rename; cross-version Live 11/12 `.als` manual check.
 
 ---
 
 ## Recent coding-agent runs
+
+### 2026-06-11 — issues #30/#27/#28 (run branch `workflow/run-2026-06-11`)
+- Triage finding: #30 (pause-in-place) and #28 (stamp preview labels) were ALREADY implemented in `main` (commit `054b717`, the Electron PR #25): `osc-client.pausePlaying()` sends only `/live/song/stop_playing` (Live does not rewind on stop), `continuePlaying()` sends `/live/song/continue_playing`, `returnToStart()` is the separate "Stop (to start)" control, and `ws-server.ts` maps `play/pause/stop`→those methods. `views.tsx` already has the "Now playing"/"Next to stamp →"/`next-up` labelling. The GitHub issues were stale/never-closed. A leftover stale branch `issue-30-pause-playhead` (based on old main, superseded by the better main impl) was NOT used.
+- #27 was the only genuine new work — the client had no chord-above-lyric preview.
+- Files modified:
+  - `client/src/chord-preview.ts` (NEW) — pure `renderChordProHtml(text)` using chordsheetjs `ChordProParser` + `HtmlTableFormatter` (default-import pattern, same as server/src/chordpro.ts). Empty→empty container; malformed→HTML-escaped `<pre>` fallback.
+  - `client/src/views.tsx` (EDIT) — import `renderChordProHtml`+`useMemo`; render a `.chordpro-preview` block (memoized on `pasteText`) in the setup body below the Lyrics textarea via `dangerouslySetInnerHTML` (HtmlTableFormatter HTML-escapes paste text).
+  - `client/src/styles.css` (EDIT) — `.chordpro-preview` + `.chord-sheet`/`.paragraph`/`table.row`/`td.chord`/`td.lyrics`/`.title`/`.subtitle`/`.comment`/`pre` styling (accent-colored chords above lyrics).
+  - `e2e/tests/verification.spec.ts` (EDIT) — added `#27` UI test asserting the preview DOM has a `td.chord` containing "G" positioned above a `td.lyrics`, and `.title` shows "Amazing Grace".
+  - `docs/ai/contracts/issue-{27,28,30}.json` (NEW) — acceptance contracts.
+  - `tests/contract/issue-{27,28,30}.spec.ts` (NEW) + `vitest.contract.config.ts` (NEW) — contract tests (run via the dedicated config, kept out of the default `npm test` glob).
+- Checks run (all PASS): `npm run typecheck`, `npm run lint`, `npm test` (145 unit), `npx vitest run --config vitest.contract.config.ts` (10 contract). e2e (Playwright) pending verification-gate after `electron:build`.
+- Did NOT modify `server/src/chordpro.ts` — stamp path stays lyric-only (#27-c3 guards this).
+- Concerns: contract tests live under `tests/contract/` with their own config (not in the CI `npm test` glob); verification-gate runs them explicitly. The #27 preview renders from raw `pasteText` immediately (no "Reload song" needed), unlike the stamp `song` which requires Reload.
 
 ### 2026-06-05 — LS-D (leadsheet Apply to Ableton client UI)
 - Files modified:
