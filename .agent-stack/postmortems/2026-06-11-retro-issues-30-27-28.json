@@ -1,0 +1,36 @@
+{
+  "run_id": "2026-06-11-retro-issues-30-27-28",
+  "issue": 27,
+  "date": "2026-06-11",
+  "smoke_result": "unknown",
+  "verification_claimed": "PASS",
+  "divergence": false,
+  "criteria_results": [],
+  "process_issues": [
+    {
+      "process_category": "test-infra",
+      "description": "Stale port-7878 listener (a leftover packaged dist/mac-arm64/LyricStamp.app from a prior electron:dist/manual-smoke session) blocked the first `npm run test:e2e` run because playwright.config.ts sets reuseExistingServer:false. Identified via lsof as a build artifact (dist/ path), not the user's installed app, and killed; e2e then passed 52. This matches the orchestrator's documented 'stale spawned subprocesses' hazard — the cheap lsof check caught it before a false-negative smoke.",
+      "detected_by": "verification-gate"
+    },
+    {
+      "process_category": "triage",
+      "description": "2 of 3 scoped issues (#30, #28) were already implemented in main (commit 054b717, Electron PR #25) and the GitHub issues were simply never closed. Reading the actual source during intake (before writing any code) revealed this and prevented re-implementing a worse version — notably the stale leftover branch issue-30-pause-playhead used the inferior pin-current_song_time approach the in-main impl had deliberately abandoned. Contracts were still written for all three to pin behavior and guard regression.",
+      "detected_by": "orchestrator-intake"
+    }
+  ],
+  "summary": "Adherence retro for the #30/#27/#28 bug-fix run (draft PR #46, CI green). STRICT run: orchestrator entry (Guard 1 satisfied, pre-flight baseline green) -> acceptance-contract (3 contracts; #27 red on unmodified main, #30/#28 green pinning existing behavior) -> coding-agent (#27 only — chord-preview module + views/styles + e2e) -> verification-gate (typecheck/lint/145 unit/10 contract/build/electron:build/52 e2e + visual screenshot; #30 c1/c2/c3 correctly recorded as manual not_tested) -> project-state-updater (top sections + decisions.md + manual-smoke Smoke 7) -> retrospective. No repair loops, no W-violations. The acceptance-contract step earned its keep: it forced the triage insight (#30/#28 already done) into executable form rather than a prose claim, and the #27 contract was genuinely red-before-green. failure-postmortem is correctly NOT run yet — manual smoke (Ableton playhead retention for #30) is a pending handoff, not a completed check, so smoke_result is 'unknown'.",
+  "workflow_adherence": {
+    "expected_chain": ["workflow-orchestrator", "acceptance-contract", "coding-agent", "verification-gate", "project-state-updater", "workflow-retrospective"],
+    "observed_chain": [
+      "workflow-orchestrator (Skill; intake A, Guard 1 + pre-flight baseline 145 unit green, run branch off fresh main)",
+      "acceptance-contract (Skill; docs/ai/contracts/issue-{27,28,30}.json + tests/contract/*.spec.ts + vitest.contract.config.ts; #27 failed pre-impl, #30/#28 passed pinning main behavior)",
+      "coding-agent (Skill; #27 chord-preview.ts + views.tsx + styles.css + e2e; #30/#28 needed no code; appended Recent coding-agent runs entry before handoff)",
+      "verification-gate (Skill; same-response evidence: typecheck/lint/145 unit/10 contract/web build/electron:build/52 e2e + 12.5KB preview screenshot; PASS block)",
+      "project-state-updater (Skill; Current focus/Active branch/Test status/Next step + decisions.md entry + manual-smoke.md Smoke 7)",
+      "workflow-retrospective (Skill; this postmortem)"
+    ],
+    "skipped_skills": [],
+    "issues": [],
+    "overall_score": "strict"
+  }
+}
