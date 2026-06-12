@@ -201,8 +201,11 @@ export class OscClient extends EventEmitter<OscClientEvents> {
    * Setting it here guarantees the next play starts from 0.
    */
   returnToStart(): void {
-    this._send(ADDR_STOP_PLAYING);
+    // Seek to 0 BEFORE stopping: stop_playing snapshots the current playhead as
+    // the internal resume point for continue_playing. Reversing the order ensures
+    // Ableton saves 0 as the resume point, not the pre-stop position.
     this._sendWithValue(ADDR_SET_SONG_TIME, 0);
+    this._send(ADDR_STOP_PLAYING);
   }
 
   /**

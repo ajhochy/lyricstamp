@@ -1,0 +1,48 @@
+{
+  "issue": 27,
+  "generated": "2026-06-11",
+  "criteria": [
+    {
+      "criterion_id": "issue-27-c1",
+      "text": "Preview tab renders chords above lyrics in the correct ChordPro style",
+      "mode": "unit",
+      "test_file": "tests/contract/issue-27.spec.ts",
+      "test_id": "issue-27-c1: chord preview HTML places chords above lyrics (chord cells precede/overlay lyric cells)",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-27-c2",
+      "text": "Directives ({title}, {comment}, {start_of_chorus}, etc.) render as section headers / labels",
+      "mode": "unit",
+      "test_file": "tests/contract/issue-27.spec.ts",
+      "test_id": "issue-27-c2: chord preview HTML renders directives as labelled elements",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-27-c3",
+      "text": "Stamping still uses lyric-only text (stamp log and .als clip names unchanged)",
+      "mode": "unit",
+      "test_file": "tests/contract/issue-27.spec.ts",
+      "test_id": "issue-27-c3: stamp path (server parseChordPro) still emits chord-bracketed lyric text unchanged by the preview feature",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-27-c4",
+      "text": "ChordPro text with no chords still renders correctly (pure lyric sheet)",
+      "mode": "unit",
+      "test_file": "tests/contract/issue-27.spec.ts",
+      "test_id": "issue-27-c4: chord preview HTML renders pure-lyric ChordPro (no chords) without error and shows the lyrics",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-27-c5",
+      "text": "Preview tab visibly shows chords above lyrics in the live app (rendered DOM)",
+      "mode": "ui",
+      "test_file": "e2e/tests/verification.spec.ts",
+      "test_id": "#27 — ChordPro preview renders chords above lyrics in the DOM",
+      "status": "pending"
+    }
+  ],
+  "stack": "typescript",
+  "not_tested": []
+}

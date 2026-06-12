@@ -1,6 +1,6 @@
 // views.tsx — LyricsView, LeadsheetView, TweaksUI
 // Ported from design/views.jsx. Class names and markup kept identical.
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Icon } from './icons';
 import {
   TweaksPanel,
@@ -11,6 +11,7 @@ import {
 } from './tweaks-panel';
 import { type PdfRenderer } from './use-pdf';
 import { type Tweaks } from './use-tweaks';
+import { renderChordProHtml } from './chord-preview';
 
 export type { Tweaks };
 
@@ -117,6 +118,11 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
 
   const progressPct = Math.round((lineIndex / Math.max(1, lineTotal)) * 100);
 
+  // ChordPro preview (issue #27): render the raw paste with chords above lyrics
+  // and directives as section labels. Display-only — the stamp path is the
+  // separately-parsed lyric-only `song`. Recomputed only when the paste changes.
+  const chordPreviewHtml = useMemo(() => renderChordProHtml(pasteText), [pasteText]);
+
   // Inline lyric editing: which stamp row is being edited + its draft text.
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editValue, setEditValue] = useState<string>('');
@@ -182,6 +188,18 @@ export const LyricsView: React.FC<LyricsViewProps> = (props) => {
                 rows={4}
               />
             </div>
+            {pasteText.trim() !== '' && (
+              <div className="field">
+                <label className="field-label">Preview (chords &amp; directives)</label>
+                <div
+                  className="chordpro-preview"
+                  // Display-only chord-above-lyric render of the raw paste.
+                  // HtmlTableFormatter HTML-escapes chord/lyric text, so the
+                  // paste is not injected as raw markup. See chord-preview.ts.
+                  dangerouslySetInnerHTML={{ __html: chordPreviewHtml }}
+                />
+              </div>
+            )}
             <div className="actions">
               <button
                 className="btn primary"

@@ -1,0 +1,45 @@
+{
+  "issue": 30,
+  "generated": "2026-06-11",
+  "criteria": [
+    {
+      "criterion_id": "issue-30-c1",
+      "text": "Press Space while playing -> playback stops, playhead stays at current position (does not jump to beat 1)",
+      "mode": "manual",
+      "status": "pending",
+      "reason": "True playhead-position retention can only be observed in a running Ableton Live instance via OSC. The OSC command mapping that produces this behavior (pause -> /live/song/stop_playing, which Live does NOT rewind) is pinned headlessly by issue-30-c5."
+    },
+    {
+      "criterion_id": "issue-30-c2",
+      "text": "Press Space again -> playback resumes from the paused position",
+      "mode": "manual",
+      "status": "pending",
+      "reason": "Resume-from-position is an Ableton Live runtime behavior. The OSC mapping (play -> /live/song/continue_playing, not start_playing) is pinned headlessly by issue-30-c5."
+    },
+    {
+      "criterion_id": "issue-30-c3",
+      "text": "Stamping mid-song, pausing, and resuming preserves timeline position throughout",
+      "mode": "manual",
+      "status": "pending",
+      "reason": "End-to-end mid-song stamp + pause + resume requires a running Ableton Live session; verified in manual smoke."
+    },
+    {
+      "criterion_id": "issue-30-c4",
+      "text": "Existing play-from-beginning behavior (if needed) is accessible via a separate control or is intentionally removed",
+      "mode": "unit",
+      "test_file": "tests/contract/issue-30.spec.ts",
+      "test_id": "issue-30-c4: a separate return-to-start control exists and rewinds the playhead to beat 0",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-30-c5",
+      "text": "OSC command mapping implements pause-in-place: pause sends stop_playing (no rewind) and play sends continue_playing (resume from position), not start_playing",
+      "mode": "unit",
+      "test_file": "tests/contract/issue-30.spec.ts",
+      "test_id": "issue-30-c5: pausePlaying sends stop_playing and continuePlaying sends continue_playing",
+      "status": "pending"
+    }
+  ],
+  "stack": "typescript",
+  "not_tested": ["issue-30-c1", "issue-30-c2", "issue-30-c3"]
+}

@@ -1,0 +1,40 @@
+{
+  "issue": 28,
+  "generated": "2026-06-11",
+  "criteria": [
+    {
+      "criterion_id": "issue-28-c1",
+      "text": "The UI clearly communicates which line will be timestamped when the stamp button is pressed",
+      "mode": "ui",
+      "test_file": "e2e/tests/verification.spec.ts",
+      "test_id": "#28 — preview shows \"Next to stamp\" label",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-28-c2",
+      "text": "After stamping, the newly-promoted line is clearly the \"next to stamp\"",
+      "mode": "ui",
+      "test_file": "e2e/tests/verification.spec.ts",
+      "test_id": "#28 — stamp target carries the next-up class and advances after a stamp",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-28-c3",
+      "text": "The distinction between \"just stamped\" and \"about to stamp\" is visually unambiguous",
+      "mode": "ui",
+      "test_file": "e2e/tests/verification.spec.ts",
+      "test_id": "#28 — distinct \"Now playing\" (prev) and \"Next to stamp\" (target) regions render",
+      "status": "pending"
+    },
+    {
+      "criterion_id": "issue-28-c4",
+      "text": "No actual stamp logic changes (only display/labelling)",
+      "mode": "unit",
+      "test_file": "tests/contract/issue-28.spec.ts",
+      "test_id": "issue-28-c4: stamp-to-clip mapping (server stampsToClips) is unchanged by the labelling work",
+      "status": "pending"
+    }
+  ],
+  "stack": "typescript",
+  "not_tested": []
+}

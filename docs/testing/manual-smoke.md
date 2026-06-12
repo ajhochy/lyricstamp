@@ -132,6 +132,26 @@ Restore the patched `track.py` when done.
 
 **Pass:** Export unchanged from pre-live-stamp behavior.
 
+## Smoke 7 — Spacebar pause-in-place (#30) — manual, Ableton required
+
+**Goal:** Confirm Space pauses without rewinding and resumes from the paused
+position (the OSC mapping is unit-pinned by `tests/contract/issue-30.spec.ts`,
+but the playhead behavior is an Ableton runtime property).
+
+1. Connect to Ableton (OSC handler loaded). Start playback from the app or Live.
+2. Let the playhead advance past beat 1 (a few bars in).
+3. Press **Space** → playback **stops and the playhead stays where it is** (it
+   must NOT jump back to beat 1).
+4. Press **Space** again → playback **resumes from the paused position** (not
+   from the beginning).
+5. Repeat mid-song while stamping: stamp a line, pause, resume — timeline
+   position is preserved throughout.
+6. Click **"Stop (to start)"** (the transport stop control) → playhead returns
+   to beat 1 (the intentional separate "rewind" control, contract #30-c4).
+
+**Pass:** Space = pause-in-place + resume-from-position; "Stop (to start)" =
+rewind to beat 1.
+
 ## Leadsheet "Apply to Ableton" (LS-A..LS-D) — manual, Ableton required
 
 Prereqs: the updated fork must be installed (it adds `/live/song/get/project_path`).
