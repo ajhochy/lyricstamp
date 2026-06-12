@@ -65,5 +65,11 @@ describe('issue-30-c4: explicit return-to-start control exists and rewinds', () 
     const setTime = sent.find((s) => s.address === '/live/song/set/current_song_time');
     expect(setTime).toBeTruthy();
     expect(setTime!.args[0]).toBe(0);
+    // Order matters: Ableton snapshots the playhead as the continue_playing resume
+    // point when it processes stop_playing — seek must arrive first so Ableton
+    // saves 0 as the resume point, not the pre-stop position.
+    const setIdx = sent.findIndex((s) => s.address === '/live/song/set/current_song_time');
+    const stopIdx = sent.findIndex((s) => s.address === '/live/song/stop_playing');
+    expect(setIdx).toBeLessThan(stopIdx);
   });
 });

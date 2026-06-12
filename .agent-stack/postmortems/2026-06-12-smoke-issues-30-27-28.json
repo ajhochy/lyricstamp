@@ -1,0 +1,161 @@
+{
+  "run_id": "2026-06-12-smoke-issues-30-27-28",
+  "issue": 30,
+  "date": "2026-06-12",
+  "smoke_result": "pass",
+  "verification_claimed": "PASS",
+  "divergence": true,
+  "criteria_results": [
+    {
+      "criterion_id": "issue-30-c1",
+      "text": "Press Space while playing -> playback stops, playhead stays at current position (does not jump to beat 1)",
+      "contract_status": "absent",
+      "smoke_status": "pass",
+      "category": "none",
+      "notes": "Confirmed live: playhead stayed at 3.2.3 after Space. No divergence."
+    },
+    {
+      "criterion_id": "issue-30-c2",
+      "text": "Press Space again -> playback resumes from the paused position",
+      "contract_status": "absent",
+      "smoke_status": "pass",
+      "category": "none",
+      "notes": "Confirmed live: resumed from paused position, not from beat 1."
+    },
+    {
+      "criterion_id": "issue-30-c3",
+      "text": "Stamping mid-song, pausing, and resuming preserves timeline position throughout",
+      "contract_status": "absent",
+      "smoke_status": "pass",
+      "category": "none",
+      "notes": "Confirmed live: stamp + pause + resume cycle preserved position."
+    },
+    {
+      "criterion_id": "issue-30-c4",
+      "text": "Existing play-from-beginning behavior (if needed) is accessible via a separate control or is intentionally removed",
+      "contract_status": "pass",
+      "smoke_status": "fail",
+      "category": "C2",
+      "notes": "Contract test passed (both stop_playing and set/current_song_time 0 were sent). Smoke found single 'Stop (to start)' reset the visual display to 1.1.1 but continue_playing resumed from the pre-stop position (~3.4). Root cause: stop_playing snapshots the current playhead as the internal resume point for continue_playing; setting current_song_time AFTER stop meant Ableton saved the old position, then the seek arrived too late. Double-clicking Stop worked (second stop found position already at 0 and saved 0 as resume point). Fix: reversed order — set/current_song_time 0 first, then stop_playing. Contract test did not enforce send order (used .toContain not positional assertion), so the wrong ordering was invisible to CI."
+    },
+    {
+      "criterion_id": "issue-30-c5",
+      "text": "OSC command mapping implements pause-in-place: pause sends stop_playing (no rewind) and play sends continue_playing (resume from position), not start_playing",
+      "contract_status": "pass",
+      "smoke_status": "pass",
+      "category": "none",
+      "notes": "Indirectly confirmed by c1/c2 smoke passing."
+    },
+    {
+      "criterion_id": "issue-27-c1",
+      "text": "Preview tab renders chords above lyrics in the correct ChordPro style",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Smoke 7 scope was #30 playhead behavior only. #27 was verified in the prior verification-gate run (visual screenshot + Playwright e2e)."
+    },
+    {
+      "criterion_id": "issue-27-c2",
+      "text": "Directives ({title}, {comment}, {start_of_chorus}, etc.) render as section headers / labels",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Same as c1 above."
+    },
+    {
+      "criterion_id": "issue-27-c3",
+      "text": "Stamping still uses lyric-only text (stamp log and .als clip names unchanged)",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Same as c1 above."
+    },
+    {
+      "criterion_id": "issue-27-c4",
+      "text": "ChordPro text with no chords still renders correctly (pure lyric sheet)",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Same as c1 above."
+    },
+    {
+      "criterion_id": "issue-27-c5",
+      "text": "Preview tab visibly shows chords above lyrics in the live app (rendered DOM)",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Playwright e2e covers this. Not re-run during smoke session."
+    },
+    {
+      "criterion_id": "issue-28-c1",
+      "text": "The UI clearly communicates which line will be timestamped when the stamp button is pressed",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Smoke 7 scope was #30 only."
+    },
+    {
+      "criterion_id": "issue-28-c2",
+      "text": "After stamping, the newly-promoted line is clearly the 'next to stamp'",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Smoke 7 scope was #30 only."
+    },
+    {
+      "criterion_id": "issue-28-c3",
+      "text": "The distinction between 'just stamped' and 'about to stamp' is visually unambiguous",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Smoke 7 scope was #30 only."
+    },
+    {
+      "criterion_id": "issue-28-c4",
+      "text": "No actual stamp logic changes (only display/labelling)",
+      "contract_status": "pass",
+      "smoke_status": "not_checked",
+      "category": "none",
+      "notes": "Smoke 7 scope was #30 only."
+    }
+  ],
+  "process_issues": [],
+  "workflow_adherence": {
+    "overall_score": "partial",
+    "expected_chain": ["smoke-test", "failure-triage", "coding-agent", "verification-gate", "project-state-updater", "failure-postmortem"],
+    "observed_chain": [
+      "smoke-test (Skill; walked Smoke 7 step-by-step with Ableton live)",
+      "inline fix (no failure-triage invoked; user approved fix directly in conversation)",
+      "contract tests only (npx vitest run --config vitest.contract.config.ts; 10/10 pass)",
+      "re-smoke step 6 (confirmed fix works reliably)",
+      "failure-postmortem (Skill; this record)"
+    ],
+    "skipped_skills": ["failure-triage", "coding-agent", "verification-gate", "project-state-updater"],
+    "issues": [
+      {
+        "workflow_category": "W1",
+        "affected_skill": "failure-triage",
+        "description": "When smoke found the stop-to-start bug, the fix was applied inline without routing through failure-triage. The user approved the fix direction conversationally, which is reasonable for a 2-line change, but the triage step (which would have produced a root-cause write-up and formal issue routing) was bypassed.",
+        "detected_by": "transcript inspection — no failure-triage Skill invocation before Edit call on osc-client.ts"
+      },
+      {
+        "workflow_category": "W5",
+        "affected_skill": "verification-gate",
+        "description": "After applying the returnToStart() fix, only the 10 contract tests were run (not the full 145 unit + 52 e2e suite). The fix was confirmed working via re-smoke but without the full verification-gate evidence block. A one-line ordering change with direct contract test coverage is low risk, but the gate was not formally run.",
+        "detected_by": "transcript inspection — no full npm test or test:e2e run after the osc-client.ts edit"
+      },
+      {
+        "workflow_category": "W1",
+        "affected_skill": "project-state-updater",
+        "description": "project-state-updater was not invoked after the returnToStart fix. The fix should be reflected in the project-state test-status and implementation notes.",
+        "detected_by": "transcript inspection — no project-state-updater Skill invocation after fix"
+      }
+    ]
+  },
+  "implementation_files": [
+    "server/src/osc-client.ts"
+  ],
+  "failure_output": "Stop (to start) single press: app + Ableton display showed 1.1.1 but continue_playing resumed from ~3.4. Double-click workaround worked. Root: stop_playing saves current position as continue_playing resume point before set/current_song_time 0 could arrive. Fix: reversed order (set 0 then stop).",
+  "overall_category": "C2",
+  "suggested_follow_up": "The c4 contract test should assert send order (positional index check: setTime index < stopPlaying index) so future ordering regressions are caught headlessly rather than requiring a live Ableton smoke."
+}
