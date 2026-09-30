@@ -47,3 +47,11 @@ Shipped & merged to main: PR #25 (Electron wrapper + session storage), PR #32 (l
 ---
 
 **Run history:** one file per run under `docs/ai/runs/` (surfaced as `ai-runs/`). This snapshot is overwritten in place.
+
+## Consolidation 2026-09-29
+
+- Folded refs: `spike/arrangement-live-write` (tip a8fe5e1, local-only AbletonOSC arrangement-clip spike) and `workflow/run-2026-06-11` (local WIP snapshot ec448ea: docs/ai frontmatter tweaks, `.agent-stack/patterns.json`, `.claude/launch.json`), merged into `mega/2026-09-29-consolidation`.
+- Dropped refs (bundle `~/Documents/.consolidation-backups/lyricstamp-2026-09-29.bundle`), all already merged on main via PRs: `issue-1-electron-wrapper` (118b697, #25), `feat/live-stamp-write` (0cf5839, #32), `chore/retro-live-stamp-write` (bddf49e, #33), `feat/notarize` (790dc3e, #34), `fix/release-publish-never` (47aa7a8, #35), `feat/leadsheet-apply` (1f68525, #36), `chore/release-0.1.1` (cd12e37, #37), `chore/retro-leadsheet-apply` (14b516b, #38), `workflow/lyricstamp-manual-guide` (bd2d02b, #42), `workflow/ableton-osc-install` (87d7f00, #43), `workflow/guide-and-installer` (b1986ad, #44), `chore/release-0.1.3` (99e0bb9, #45), remote `workflow/run-2026-06-11` (3d2b9b9, #46).
+- PR: https://github.com/ajhochy/lyricstamp/pull/47 (draft). Issue: https://github.com/ajhochy/lyricstamp/issues/48
+- In-flight worktrees: none.
+- Cleanup script (not yet run): `~/Documents/.consolidation-backups/cleanup/lyricstamp-2026-09-29-cleanup.sh`
