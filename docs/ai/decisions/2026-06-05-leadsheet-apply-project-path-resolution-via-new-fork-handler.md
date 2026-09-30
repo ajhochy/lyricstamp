@@ -1,4 +1,5 @@
 ---
+index: "[[lyricstamp]]"
 date: 2026-06-05
 repo: lyricstamp
 tags: [decision, lyricstamp]

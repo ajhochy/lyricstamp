@@ -1,3 +1,7 @@
+---
+type: project
+---
+
 # Architecture — ableset-lyrics-sync
 
 ## App summary

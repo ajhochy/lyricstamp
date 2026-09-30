@@ -1,3 +1,7 @@
+---
+type: run-log
+---
+
 # Project State — LyricStamp (repo slug: lyricstamp; data dir stays ableset-lyrics-sync)
 
 _Last updated: 2026-06-11_

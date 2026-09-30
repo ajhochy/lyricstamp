@@ -1,3 +1,7 @@
+---
+type: project
+---
+
 # Current Plan — ableset-lyrics-sync
 
 _Updated: 2026-06-05_
