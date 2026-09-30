@@ -1,3 +1,7 @@
+---
+type: project
+---
+
 # Repo Map — ableset-lyrics-sync
 
 ## Top-level structure
