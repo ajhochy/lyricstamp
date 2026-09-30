@@ -1,0 +1,142 @@
+{
+  "patterns": [
+    {
+      "id": "c1-missing-contract",
+      "category": "C1",
+      "description": "Missing contract failures: 18 occurrence(s) across issues ['1', '25', '32', '34', '36']",
+      "occurrences": 18,
+      "affected_issues": [
+        "1",
+        "25",
+        "32",
+        "34",
+        "36"
+      ],
+      "affected_skills": [
+        "acceptance-contract"
+      ],
+      "reason": "A criterion was never made executable. The acceptance-contract skill should parse this criterion type more aggressively.",
+      "suggested_prompt_addition": "When parsing acceptance criteria, also look for implicit requirements expressed as negative conditions, edge cases, or 'should not' clauses.",
+      "evidence_files": [
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-live-apply-clip-length.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-live-stamp-write-pass.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-live-stamp-write-pass.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-live-stamp-write-pass.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-notarization.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-notarization.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-session-storage.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-session-storage.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-session-storage.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-session-storage.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-06-leadsheet-apply-pass.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-06-leadsheet-apply-pass.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-06-leadsheet-apply-pass.json"
+      ]
+    }
+  ],
+  "process_patterns": [
+    {
+      "id": "p3-scope-expansion",
+      "category": "P3",
+      "description": "Scope expansion failures: 2 occurrence(s) across issues ['1']",
+      "occurrences": 2,
+      "affected_issues": [
+        "1"
+      ],
+      "affected_skills": [
+        "acceptance-contract"
+      ],
+      "reason": "Implementation went beyond the issue scope \u2014 added unrequested features or refactored outside the acceptance criteria.",
+      "suggested_prompt_addition": "Before accepting a coding-agent result, diff the changed files against the issue's acceptance criteria. Any file not referenced in the issue or the contract test is a scope violation unless the coding-agent explicitly justified it.",
+      "evidence_files": [
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issues-26-27-28.json"
+      ]
+    },
+    {
+      "id": "p2-test-infrastructure-conflict",
+      "category": "P2",
+      "description": "Test infrastructure conflict failures: 1 occurrence(s) across issues ['32']",
+      "occurrences": 1,
+      "affected_issues": [
+        "32"
+      ],
+      "affected_skills": [
+        "workflow-orchestrator"
+      ],
+      "reason": "Test runner glob overlap caused one runner to pick up another runner's files, producing spurious failures.",
+      "suggested_prompt_addition": "During pre-flight check, inspect all test runner config files for overlapping include/testMatch globs. If vitest.config.ts and playwright.config.ts share a directory pattern, tighten the globs before dispatching any coding-agent.",
+      "evidence_files": [
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-retro-live-stamp-write.json"
+      ]
+    }
+  ],
+  "workflow_patterns": [
+    {
+      "id": "w1-required-skill-skipped",
+      "category": "W1",
+      "description": "Required skill skipped failures: 6 occurrence(s) across issues ['1', '25']",
+      "occurrences": 6,
+      "affected_issues": [
+        "1",
+        "25"
+      ],
+      "affected_skills": [
+        "workflow-orchestrator"
+      ],
+      "reason": "A required skill in the canonical chain was skipped. The orchestrator must enforce the chain \u2014 every required step is gated.",
+      "suggested_prompt_addition": "Before dispatching the next step, verify that the immediately-previous required step in the chain announced itself, expanded its TodoWrite checklist, and emitted its expected output artifact. If the previous step is missing, halt and surface the gap rather than continuing.",
+      "evidence_files": [
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issue-1.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issues-26-27-28.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issues-26-27-28.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-retro-session-storage.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-retro-session-storage.json"
+      ]
+    },
+    {
+      "id": "w3-todowrite-checklist-not-expanded",
+      "category": "W3",
+      "description": "TodoWrite checklist not expanded failures: 2 occurrence(s) across issues ['25']",
+      "occurrences": 2,
+      "affected_issues": [
+        "25"
+      ],
+      "affected_skills": [
+        "workflow-orchestrator"
+      ],
+      "reason": "A skill said 'expand Completion Checklist into TodoWrite items at start' and the agent did not. The skills themselves should make this harder to skip, but the orchestrator can also verify.",
+      "suggested_prompt_addition": "When dispatching any skill whose SKILL.md contains the phrase 'expand the Completion Checklist into TodoWrite items at start', include in the dispatch prompt: 'Your FIRST tool call must be TodoWrite, expanding the Completion Checklist verbatim. No other tool calls are permitted before this.'",
+      "evidence_files": [
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-05-retro-session-storage.json",
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-06-rebrand-lyricstamp-pass.json"
+      ]
+    },
+    {
+      "id": "w6-wrong-repo/branch-operation",
+      "category": "W6",
+      "description": "Wrong-repo/branch operation failures: 1 occurrence(s) across issues []",
+      "occurrences": 1,
+      "affected_issues": [],
+      "affected_skills": [
+        "workflow-orchestrator"
+      ],
+      "reason": "Skill targeted agent-stack but commits/PRs went to target project (or vice versa), or branch was not confirmed before a visible operation.",
+      "suggested_prompt_addition": "Add a Repo+Branch Confirmation gate: every skill that performs git push, gh pr create, browser smoke against a deployed URL, or any operation visible outside the local checkout must first emit `git -C <path> remote get-url origin` and `git -C <path> rev-parse --abbrev-ref HEAD`, compare against the skill's intended target, and halt on mismatch.",
+      "evidence_files": [
+        "/Users/ajhochhalter/Documents/lyricstamp/.agent-stack/postmortems/2026-06-02-issues-26-27-28.json"
+      ]
+    }
+  ],
+  "last_updated": "2026-06-11",
+  "total_runs_analyzed": 13,
+  "min_occurrences_threshold": 2,
+  "process_min_occurrences_threshold": 1,
+  "workflow_min_occurrences_threshold": 1
+}
